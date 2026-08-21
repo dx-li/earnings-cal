@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
 from edgar import Company, set_identity
+from earnings_cal.research_repository import ResearchRepository
 
 BRIEF_SHAPE = {"period":"fiscal period","verdict":"quality of print","top_line":{"summary":"","drivers":[]},"bottom_line":{"summary":"","drivers":[]},"cash_inventory":{"summary":"","drivers":[]},"watch_items":[],"sources":[{"title":"","url":"","type":"filing|transcript|web"}],"limitations":[]}
 TOOLS = [
@@ -27,24 +28,32 @@ def _plain_text(html: str) -> str:
 
 class EarningsBriefHarness:
     """Small observable tool loop; the model cannot access arbitrary local state."""
-    def __init__(self, root: Path, api_key: str, model: str = "deepseek-v4-flash"):
-        self.root, self.api_key, self.model = root, api_key, model
+    def __init__(self, repository: ResearchRepository, api_key: str, model: str = "deepseek-v4-flash"):
+        self.repository, self.api_key, self.model = repository, api_key, model
         self.http = requests.Session()
         identity = os.getenv("EDGAR_IDENTITY", "earnings-cal research@example.com")
         self.http.headers.update({"User-Agent": identity})
         set_identity(identity)
 
     def cached(self, ticker: str) -> dict | None:
-        try: return json.loads((self.root / f"{ticker.upper()}-latest-brief.json").read_text(encoding="utf-8"))
-        except Exception: return None
+        return self.repository.cached_brief(ticker)
 
     def run(self, ticker: str, company_name: str | None = None) -> dict:
         ticker = ticker.upper()
+        run_id = self.repository.begin_run(ticker, self.model)
+        usage = {"input_tokens":0,"output_tokens":0}
+        try:
+            return self._run(ticker, company_name, run_id, usage)
+        except Exception as exc:
+            self.repository.finish_run(run_id, usage, str(exc))
+            raise
+
+    def _run(self, ticker: str, company_name: str | None, run_id: str, usage: dict) -> dict:
         messages = [
             {"role":"system","content":"You are a public-equity earnings analyst in a bounded research harness. Use official SEC filings first, then find the earnings transcript or prepared remarks. Never invent a number, quote, or cause. Separate reported facts from management explanations. If evidence is unavailable, say so. Return concise JSON only when research is complete."},
             {"role":"user","content":f"Research {company_name or ticker} ({ticker})'s most recent reported earnings. Explain top-line, bottom-line, cash-flow/working-capital/inventory drivers. Use tools, then return JSON matching this exact shape: {json.dumps(BRIEF_SHAPE)}"},
         ]
-        trace, usage = [], {"input_tokens":0,"output_tokens":0}
+        trace = []
         for step in range(6):
             response = self.http.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {self.api_key}"}, json={"model":self.model,"messages":messages,"tools":TOOLS,"tool_choice":"auto","thinking":{"type":"disabled"},"max_tokens":4000,"temperature":0.1}, timeout=180)
             response.raise_for_status(); body=response.json(); counts=body.get("usage") or {}
@@ -60,8 +69,10 @@ class EarningsBriefHarness:
                     messages.append({"role":"user","content":f"Return the completed answer now as one JSON object only, matching this exact shape: {json.dumps(BRIEF_SHAPE)}"})
                     continue
                 result.update({"ticker":ticker,"generated_at":datetime.now(timezone.utc).isoformat(),"model":self.model,"usage":usage,"trace":trace})
-                self._validate(result); path=self.root/f"{ticker}-latest-brief.json"; path.parent.mkdir(parents=True,exist_ok=True)
-                tmp=path.with_suffix(".tmp"); tmp.write_text(json.dumps(result,indent=2),encoding="utf-8"); tmp.replace(path)
+                result["run_id"] = run_id
+                self._validate(result)
+                self.repository.save_brief(ticker, result, run_id)
+                self.repository.finish_run(run_id, usage)
                 return result
             messages.append({k:v for k,v in message.items() if k in {"role","content","tool_calls","reasoning_content"}})
             for call in calls:
@@ -69,8 +80,10 @@ class EarningsBriefHarness:
                 try: output=self._tool(ticker,name,json.loads(call.get("function",{}).get("arguments") or "{}")); ok=True
                 except Exception as exc: output={"error":str(exc)}; ok=False
                 trace.append({"step":step+1,"tool":name,"ok":ok})
+                self.repository.record_tool(run_id, ticker, step + 1, name, ok, output)
                 messages.append({"role":"tool","tool_call_id":call.get("id"),"content":json.dumps(output)[:120000]})
-        raise RuntimeError("Research stopped at the six-step safety limit before producing a brief")
+        error = "Research stopped at the six-step safety limit before producing a brief"
+        raise RuntimeError(error)
 
     def _tool(self, ticker: str, name: str, args: dict):
         if name == "get_recent_filings":

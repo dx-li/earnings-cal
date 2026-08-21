@@ -9,20 +9,34 @@ from earnings_cal.research_config import ResearchConfig
 from unittest.mock import patch
 from earnings_cal import research_sources
 from earnings_cal.earnings_brief import EarningsBriefHarness
+from earnings_cal.research_repository import ResearchRepository
 
 
 class ResearchLabTests(TestCase):
     def test_earnings_brief_rejects_uncited_output(self):
         with TemporaryDirectory() as tmp:
-            harness = EarningsBriefHarness(Path(tmp), "test-key")
+            harness = EarningsBriefHarness(ResearchRepository(Path(tmp)), "test-key")
             with self.assertRaises(ValueError):
                 harness._validate({"period":"Q1","verdict":"","top_line":{},"bottom_line":{},"cash_inventory":{},"watch_items":[],"sources":[],"limitations":[]})
 
     def test_earnings_brief_cache_round_trip(self):
         with TemporaryDirectory() as tmp:
-            path = Path(tmp) / "ABC-latest-brief.json"
-            path.write_text('{"ticker":"ABC"}', encoding="utf-8")
-            self.assertEqual(EarningsBriefHarness(Path(tmp), "test-key").cached("abc"), {"ticker":"ABC"})
+            repository = ResearchRepository(Path(tmp))
+            repository.save_brief("ABC", {"ticker":"ABC","generated_at":"2026-01-01","period":"Q1"}, None)
+            self.assertEqual(EarningsBriefHarness(repository, "test-key").cached("abc")["ticker"], "ABC")
+
+    def test_research_repository_catalogs_lake_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repository = ResearchRepository(Path(tmp))
+            run_id = repository.begin_run("ABC", "test-model")
+            repository.record_tool(run_id, "ABC", 1, "get_recent_filings", True, {"filings":[{"form":"10-Q"}]})
+            repository.finish_run(run_id, {"input_tokens":10,"output_tokens":2})
+            with repository.connect() as db:
+                artifact = db.execute("SELECT * FROM source_artifacts").fetchone()
+                run = db.execute("SELECT * FROM research_runs").fetchone()
+            self.assertTrue((repository.root / artifact["lake_path"]).is_file())
+            self.assertEqual(run["status"], "complete")
+            self.assertEqual(run["input_tokens"], 10)
 
     def test_store_is_append_only_for_observations(self):
         with TemporaryDirectory() as tmp:

@@ -21,6 +21,16 @@ The Company tab can generate a cached, source-linked latest-earnings brief. Put
 the bounded agent searches for a public earnings transcript when needed. Set an
 SEC-compliant identity with `EDGAR_IDENTITY="Your Name you@example.com"`.
 
+Research data is stored outside Windows AppData under `data/research/`:
+
+- `earnings-research.sqlite3` catalogs cached briefs, runs, and source lineage.
+- `lake/bronze/` retains immutable tool/source snapshots.
+- `lake/curated/earnings-briefs/` retains human-readable brief JSON.
+
+Set `EARNINGS_DATA_ROOT` in `.env` to move the database and lake to another
+drive. Existing AppData brief JSON is copied into this store on first use; the
+legacy files are left untouched.
+
 ## Desktop App
 
 ```powershell

@@ -9,6 +9,7 @@ build-research/
 dist-research/
 *.spec
 data/raw/
+data/research/
 
 .pytest_cache/
 .ruff_cache/

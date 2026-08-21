@@ -20,6 +20,7 @@ from earnings_cal.audit import AuditJournal
 from earnings_cal.notes import NotesJournal
 from earnings_cal.season_analytics import summarize_seasons
 from earnings_cal.earnings_brief import EarningsBriefHarness
+from earnings_cal.research_repository import ResearchRepository
 
 
 def _load_environment() -> None:
@@ -52,6 +53,18 @@ def _data_dir() -> Path:
     d = Path(base) / "earnings-cal"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _research_data_dir() -> Path:
+    configured = os.environ.get("EARNINGS_DATA_ROOT")
+    if configured:
+        root = Path(configured).expanduser()
+    elif getattr(sys, "frozen", False):
+        root = Path(sys.executable).resolve().parent.parent / "data" / "research"
+    else:
+        root = Path(__file__).resolve().parents[2] / "data" / "research"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 ASSETS_DIR = _bundle_root() / "assets"
@@ -1135,18 +1148,28 @@ def api_earnings_ticker(ticker: str):
 @app.route("/api/earnings/ticker/<ticker>/brief", methods=["GET", "POST"])
 def api_earnings_brief(ticker: str):
     ticker = ticker.strip().upper()
+    repository = ResearchRepository(_research_data_dir())
     key = os.environ.get("DEEPSEEK_API_KEY")
-    if not key:
-        return jsonify({"error": "DEEPSEEK_API_KEY is not configured"}), 503
-    harness = EarningsBriefHarness(_data_dir() / "research-briefs", key, os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
-    cached = harness.cached(ticker)
+    cached = repository.cached_brief(ticker)
     if request.method == "GET":
         return (jsonify(cached), 200) if cached else (jsonify({}), 404)
+    if not key:
+        return jsonify({"error": "DEEPSEEK_API_KEY is not configured"}), 503
+    harness = EarningsBriefHarness(repository, key, os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
     try:
         company = cached_earnings(ticker)
         return jsonify(harness.run(ticker, company.get("name")))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/research/storage")
+def api_research_storage():
+    repository = ResearchRepository(_research_data_dir())
+    with repository.connect() as db:
+        counts = {table: db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                  for table in ("earnings_briefs", "research_runs", "source_artifacts")}
+    return jsonify({"root": str(repository.root), "database": str(repository.db_path), "counts": counts})
 
 
 def _normalized_close_series(hist) -> dict[str, float]:

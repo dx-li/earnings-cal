@@ -1180,7 +1180,7 @@ def api_earnings_briefs(ticker: str):
 
 
 _brief_worker_lock = threading.Lock()
-_brief_worker: threading.Thread | None = None
+_brief_workers: list[threading.Thread] = []
 
 
 def _completed_brief_event(ticker: str) -> tuple[dict, dict] | None:
@@ -1210,7 +1210,7 @@ def _brief_worker_loop() -> None:
 
 
 def start_brief_backfill() -> dict:
-    global _brief_worker
+    global _brief_workers
     queued = 0
     for ticker in load_tickers():
         match = _completed_brief_event(ticker)
@@ -1220,17 +1220,24 @@ def start_brief_backfill() -> dict:
         if data_repository.enqueue_brief(ticker, str(event["date"])[:10], event["fiscal_period"], company.get("name")):
             queued += 1
     with _brief_worker_lock:
-        if os.environ.get("DEEPSEEK_API_KEY") and (_brief_worker is None or not _brief_worker.is_alive()):
-            _brief_worker = threading.Thread(target=_brief_worker_loop, name="earnings-brief-worker", daemon=True)
-            _brief_worker.start()
-    return {"queued_now": queued, "jobs": data_repository.brief_job_counts(), "running": bool(_brief_worker and _brief_worker.is_alive())}
+        _brief_workers = [worker for worker in _brief_workers if worker.is_alive()]
+        concurrency = min(max(int(os.environ.get("DEEPSEEK_MAX_CONCURRENCY", "32")), 1), 128)
+        if os.environ.get("DEEPSEEK_API_KEY"):
+            for index in range(len(_brief_workers), concurrency):
+                worker = threading.Thread(target=_brief_worker_loop, name=f"earnings-brief-worker-{index + 1}", daemon=True)
+                worker.start()
+                _brief_workers.append(worker)
+    return {"queued_now": queued, "jobs": data_repository.brief_job_counts(), "coverage": data_repository.brief_job_statuses(),
+            "active_workers": sum(worker.is_alive() for worker in _brief_workers), "configured_concurrency": concurrency}
 
 
 @app.route("/api/research/brief-backfill", methods=["GET", "POST"])
 def api_brief_backfill():
     if request.method == "POST":
         return jsonify(start_brief_backfill())
-    return jsonify({"jobs": data_repository.brief_job_counts(), "running": bool(_brief_worker and _brief_worker.is_alive())})
+    return jsonify({"jobs": data_repository.brief_job_counts(), "coverage": data_repository.brief_job_statuses(),
+                    "active_workers": sum(worker.is_alive() for worker in _brief_workers),
+                    "configured_concurrency": min(max(int(os.environ.get("DEEPSEEK_MAX_CONCURRENCY", "32")), 1), 128)})
 
 
 @app.route("/api/research/storage")

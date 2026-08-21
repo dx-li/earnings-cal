@@ -294,6 +294,7 @@
       <select id="companyTicker" aria-label="Company"></select>
       <select id="companyPeriod" class="period-select" aria-label="Chart range"><option value="ytd" selected>YTD</option><option value="1y">1Y</option><option value="3y">3Y</option><option value="5y">5Y</option></select>
       <span id="companySummary" class="muted"></span>
+      <span id="briefQueueStatus" class="muted"></span>
     </div>
     <div id="companyView"></div>
   </section>
@@ -323,6 +324,7 @@
 
 <script>
 let earnings = [];
+let briefCoverage = {};
 let loadSeq = 0;
 let benchmarkReturns = {XLB:{}, XLI:{}, SPY:{}};
 let benchmarkRangeKey = '';
@@ -666,7 +668,7 @@ function renderCompany() {
   const select = $('#companyTicker');
   const prior = select.value;
   const sorted = [...earnings].sort((a,b) => a.ticker.localeCompare(b.ticker));
-  select.innerHTML = sorted.map(e => `<option value="${esc(e.ticker)}">${esc(e.ticker)} · ${esc(e.name || '')}</option>`).join('');
+  select.innerHTML = sorted.map(e => {const s=briefCoverage[e.ticker]?.status;const mark=s==='complete'?'✓ ':s==='failed'?'! ':s==='running'?'↻ ':'';return `<option value="${esc(e.ticker)}">${mark}${esc(e.ticker)} · ${esc(e.name || '')}</option>`}).join('');
   if (prior && sorted.some(e => e.ticker === prior)) select.value = prior;
   const company = sorted.find(e => e.ticker === select.value) || sorted[0];
   const view = $('#companyView');
@@ -701,6 +703,16 @@ async function loadEarningsBrief(ticker, refresh, releaseDate, fiscalPeriod) {
     const card=(title,section)=>`<article class="brief-card"><h4>${title}</h4><p>${esc(section?.summary||'Not disclosed')}</p><ul>${(section?.drivers||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></article>`;
     box.innerHTML=`<div class="brief-head"><div><h3 class="analytics-section">Earnings drivers · ${esc(d.fiscal_period||fiscalPeriod)}</h3><div class="muted">Released ${esc(d.release_date||releaseDate)} · generated ${fmt(d.generated_at)}</div></div><button onclick="loadEarningsBrief('${esc(ticker)}',true,'${esc(releaseDate)}','${esc(fiscalPeriod)}')">Regenerate</button></div><p><strong>${esc(d.verdict||'')}</strong></p><div class="brief-grid">${card('Top line',d.top_line)}${card('Bottom line',d.bottom_line)}${card('Cash flow & inventory',d.cash_inventory)}</div><details><summary>Sources, watch items & limitations</summary><p>${(d.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(' · ')}</p><ul>${[...(d.watch_items||[]),...(d.limitations||[]).map(x=>`Limitation: ${x}`)].map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`;
   } catch(err) { box.innerHTML=`<div class="brief-head"><h3 class="analytics-section">Earnings drivers · ${esc(fiscalPeriod)}</h3><button onclick="loadEarningsBrief('${esc(ticker)}',true,'${esc(releaseDate)}','${esc(fiscalPeriod)}')">Retry</button></div><div class="empty">${esc(err.message)}</div>`; }
+}
+
+async function loadBriefCoverage() {
+  try {
+    const response=await fetch('/api/research/brief-backfill');
+    const data=await response.json(); briefCoverage=data.coverage||{};
+    const jobs=data.jobs||{}, done=jobs.complete||0, failed=jobs.failed||0, pending=(jobs.queued||0)+(jobs.running||0);
+    const status=$('#briefQueueStatus');
+    if(status) status.textContent=`Briefs ${done}/${done+failed+pending} ready${pending?` · ${pending} processing`:''}${failed?` · ${failed} retrying`:''}`;
+  } catch (_) {}
 }
 
 function groupTapeStats(company) {
@@ -1334,6 +1346,8 @@ document.querySelectorAll('.tab').forEach(t => {
 
 loadTickerList();
 loadEarnings();
+loadBriefCoverage();
+setInterval(loadBriefCoverage, 10000);
 </script>
 </body>
 </html>

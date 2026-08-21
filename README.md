@@ -34,11 +34,15 @@ drive. Existing AppData brief JSON is copied into this store on first use; the
 legacy files are left untouched.
 
 The desktop app queues the latest completed release for every watched ticker in
-a single background research worker. Briefs are keyed by ticker, release date,
+a concurrent background research pool. Briefs are keyed by ticker, release date,
 and issuer fiscal period, so historical quarters remain independently clickable
 and regenerable. The Analytics tab groups completed reports by calendar quarter
 of the announcement and labels that basis explicitly; it does not treat the
 release quarter as the issuer's fiscal quarter.
+
+The DeepSeek pool defaults to 32 concurrent company jobs and can be tuned with
+`DEEPSEEK_MAX_CONCURRENCY` (1–128). Job claiming is atomic, failures are retried
+on restart, and transient 429/500/503 responses use exponential backoff.
 
 On first launch, the operational files are also copied from `%APPDATA%\earnings-cal`
 into the lake and registered in SQLite's `data_assets` catalog. The application

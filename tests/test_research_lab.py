@@ -7,6 +7,7 @@ from earnings_cal.research_store import ResearchStore
 from earnings_cal.research_agents import ResearchPipeline, _deepseek_extract, standardized_call
 from earnings_cal.research_config import ResearchConfig
 from unittest.mock import patch
+from concurrent.futures import ThreadPoolExecutor
 from earnings_cal import research_sources
 from earnings_cal.earnings_brief import EarningsBriefHarness
 from earnings_cal.research_repository import ResearchRepository
@@ -41,6 +42,16 @@ class ResearchLabTests(TestCase):
             job = repository.next_brief_job()
             self.assertEqual(job["fiscal_period"], "FY2026 Q2")
             repository.finish_brief_job(job)
+
+    def test_concurrent_workers_claim_each_job_once(self):
+        with TemporaryDirectory() as tmp:
+            repository = ResearchRepository(Path(tmp))
+            for index in range(20):
+                repository.enqueue_brief(f"T{index}", "2026-07-20", "FY2026 Q2", None)
+            with ThreadPoolExecutor(max_workers=10) as pool:
+                jobs = list(pool.map(lambda _: repository.next_brief_job(), range(20)))
+            keys = {(job["ticker"], job["release_date"], job["fiscal_period"]) for job in jobs if job}
+            self.assertEqual(len(keys), 20)
 
     def test_research_repository_catalogs_lake_artifact(self):
         with TemporaryDirectory() as tmp:

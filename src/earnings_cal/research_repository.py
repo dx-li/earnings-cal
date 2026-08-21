@@ -198,6 +198,7 @@ class ResearchRepository:
 
     def next_brief_job(self) -> dict | None:
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM brief_jobs WHERE status='queued' ORDER BY queued_at LIMIT 1").fetchone()
             if not row:
                 return None
@@ -216,6 +217,11 @@ class ResearchRepository:
         with self.connect() as db:
             rows = db.execute("SELECT status,COUNT(*) AS n FROM brief_jobs GROUP BY status").fetchall()
         return {row["status"]: row["n"] for row in rows}
+
+    def brief_job_statuses(self) -> dict:
+        with self.connect() as db:
+            rows = db.execute("SELECT ticker,status,release_date,fiscal_period,error FROM brief_jobs").fetchall()
+        return {row["ticker"]: dict(row) for row in rows}
 
     def _import_legacy_briefs(self) -> None:
         base = Path(os.environ.get("APPDATA") or Path.home()) / "earnings-cal" / "research-briefs"

@@ -6,6 +6,8 @@ import os
 import re
 import ipaddress
 import socket
+import random
+import time
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
@@ -57,7 +59,7 @@ class EarningsBriefHarness:
             {"role":"user","content":f"Research {company_name or ticker} ({ticker}) earnings released {self.target_release_date or 'most recently'} for {self.target_fiscal_period or 'the corresponding fiscal period'}. Explain top-line, bottom-line, cash-flow/working-capital/inventory drivers. Do not substitute a different quarter. Use tools, then return JSON matching this exact shape: {json.dumps(BRIEF_SHAPE)}"},
         ]
         trace = []
-        for step in range(8):
+        for step in range(10):
             final_only = step >= 6
             if final_only and (not messages or messages[-1].get("content") != "Research is complete. Use the gathered evidence and return the required JSON object now. Do not call more tools."):
                 messages.append({"role":"user","content":"Research is complete. Use the gathered evidence and return the required JSON object now. Do not call more tools."})
@@ -66,7 +68,8 @@ class EarningsBriefHarness:
                 payload["response_format"]={"type":"json_object"}
             else:
                 payload.update({"tools":TOOLS,"tool_choice":"auto"})
-            response = self.http.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {self.api_key}"}, json=payload, timeout=180)
+            payload["user_id"] = f"earnings-cal-{ticker}"
+            response = self._post_deepseek(payload)
             response.raise_for_status(); body=response.json(); counts=body.get("usage") or {}
             usage["input_tokens"] += counts.get("prompt_tokens",0); usage["output_tokens"] += counts.get("completion_tokens",0)
             message=((body.get("choices") or [{}])[0].get("message") or {}); calls=message.get("tool_calls") or []
@@ -98,6 +101,20 @@ class EarningsBriefHarness:
                 messages.append({"role":"tool","tool_call_id":call.get("id"),"content":json.dumps(output)[:120000]})
         error = "Research stopped at the bounded tool-and-synthesis limit before producing a brief"
         raise RuntimeError(error)
+
+    def _post_deepseek(self, payload: dict):
+        for attempt in range(6):
+            response = self.http.post("https://api.deepseek.com/chat/completions",
+                headers={"Authorization":f"Bearer {self.api_key}"}, json=payload, timeout=180)
+            if response.status_code not in {429, 500, 503}:
+                response.raise_for_status()
+                return response
+            if attempt == 5:
+                response.raise_for_status()
+            retry_after = response.headers.get("Retry-After")
+            delay = float(retry_after) if retry_after and retry_after.replace(".", "", 1).isdigit() else min(30.0, 1.5 * (2 ** attempt))
+            time.sleep(delay + random.uniform(0, 0.5))
+        raise RuntimeError("DeepSeek retry loop exited unexpectedly")
 
     def _tool(self, ticker: str, name: str, args: dict):
         if name == "get_recent_filings":

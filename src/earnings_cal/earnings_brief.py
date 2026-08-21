@@ -57,8 +57,16 @@ class EarningsBriefHarness:
             {"role":"user","content":f"Research {company_name or ticker} ({ticker}) earnings released {self.target_release_date or 'most recently'} for {self.target_fiscal_period or 'the corresponding fiscal period'}. Explain top-line, bottom-line, cash-flow/working-capital/inventory drivers. Do not substitute a different quarter. Use tools, then return JSON matching this exact shape: {json.dumps(BRIEF_SHAPE)}"},
         ]
         trace = []
-        for step in range(6):
-            response = self.http.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {self.api_key}"}, json={"model":self.model,"messages":messages,"tools":TOOLS,"tool_choice":"auto","thinking":{"type":"disabled"},"max_tokens":4000,"temperature":0.1}, timeout=180)
+        for step in range(8):
+            final_only = step >= 6
+            if final_only and (not messages or messages[-1].get("content") != "Research is complete. Use the gathered evidence and return the required JSON object now. Do not call more tools."):
+                messages.append({"role":"user","content":"Research is complete. Use the gathered evidence and return the required JSON object now. Do not call more tools."})
+            payload={"model":self.model,"messages":messages,"thinking":{"type":"disabled"},"max_tokens":4000,"temperature":0.1}
+            if final_only:
+                payload["response_format"]={"type":"json_object"}
+            else:
+                payload.update({"tools":TOOLS,"tool_choice":"auto"})
+            response = self.http.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {self.api_key}"}, json=payload, timeout=180)
             response.raise_for_status(); body=response.json(); counts=body.get("usage") or {}
             usage["input_tokens"] += counts.get("prompt_tokens",0); usage["output_tokens"] += counts.get("completion_tokens",0)
             message=((body.get("choices") or [{}])[0].get("message") or {}); calls=message.get("tool_calls") or []
@@ -88,7 +96,7 @@ class EarningsBriefHarness:
                 trace.append({"step":step+1,"tool":name,"ok":ok})
                 self.repository.record_tool(run_id, ticker, step + 1, name, ok, output)
                 messages.append({"role":"tool","tool_call_id":call.get("id"),"content":json.dumps(output)[:120000]})
-        error = "Research stopped at the six-step safety limit before producing a brief"
+        error = "Research stopped at the bounded tool-and-synthesis limit before producing a brief"
         raise RuntimeError(error)
 
     def _tool(self, ticker: str, name: str, args: dict):

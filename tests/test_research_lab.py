@@ -38,6 +38,23 @@ class ResearchLabTests(TestCase):
             self.assertEqual(run["status"], "complete")
             self.assertEqual(run["input_tokens"], 10)
 
+    def test_operational_data_migration_is_non_destructive_and_one_time(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy = root / "legacy-tickers.json"
+            legacy.write_text('["ABC"]', encoding="utf-8")
+            repository = ResearchRepository(root / "platform")
+            destination = repository.operational_path("ticker_universe", "tickers.json", legacy)
+            self.assertEqual(destination.read_text(encoding="utf-8"), '["ABC"]')
+            self.assertTrue(legacy.exists())
+            legacy.write_text('["CHANGED"]', encoding="utf-8")
+            repository.operational_path("ticker_universe", "tickers.json", legacy)
+            self.assertEqual(destination.read_text(encoding="utf-8"), '["ABC"]')
+            with repository.connect() as db:
+                asset = db.execute("SELECT * FROM data_assets WHERE name='ticker_universe'").fetchone()
+            self.assertEqual(asset["format"], "json")
+            self.assertIsNotNone(asset["migrated_at"])
+
     def test_store_is_append_only_for_observations(self):
         with TemporaryDirectory() as tmp:
             store = ResearchStore(Path(tmp))

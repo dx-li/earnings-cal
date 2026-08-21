@@ -64,9 +64,33 @@ class ResearchRepository:
                     model TEXT, lake_path TEXT NOT NULL, brief_json TEXT NOT NULL,
                     run_id TEXT, FOREIGN KEY(run_id) REFERENCES research_runs(id)
                 );
+                CREATE TABLE IF NOT EXISTS data_assets (
+                    name TEXT PRIMARY KEY, category TEXT NOT NULL, format TEXT NOT NULL,
+                    lake_path TEXT NOT NULL, legacy_path TEXT, migrated_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_artifacts_ticker ON source_artifacts(ticker, captured_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_ticker ON research_runs(ticker, started_at);
             """)
+
+    def operational_path(self, name: str, filename: str, legacy_path: Path | None = None) -> Path:
+        """Return a lake path, copying a legacy file once without deleting it."""
+        folder = self.lake / "operational"
+        folder.mkdir(parents=True, exist_ok=True)
+        destination = folder / filename
+        migrated_at = None
+        if not destination.exists() and legacy_path and legacy_path.is_file():
+            shutil.copy2(legacy_path, destination)
+            migrated_at = self._now()
+        file_format = destination.suffix.lstrip(".") or "binary"
+        with self.connect() as db:
+            db.execute("""INSERT INTO data_assets(name,category,format,lake_path,legacy_path,migrated_at,updated_at)
+                VALUES(?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET lake_path=excluded.lake_path,
+                legacy_path=excluded.legacy_path,updated_at=excluded.updated_at,
+                migrated_at=COALESCE(data_assets.migrated_at,excluded.migrated_at)""",
+                (name, "operational", file_format, destination.relative_to(self.root).as_posix(),
+                 str(legacy_path) if legacy_path else None, migrated_at, self._now()))
+        return destination
 
     def begin_run(self, ticker: str, model: str) -> str:
         run_id = uuid.uuid4().hex

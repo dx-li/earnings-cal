@@ -68,12 +68,14 @@ def _research_data_dir() -> Path:
 
 
 ASSETS_DIR = _bundle_root() / "assets"
-TICKERS_FILE = _data_dir() / "tickers.json"
-SNAPSHOT_FILE = _data_dir() / "snapshot.json"
-ARCHIVE_FILE = _data_dir() / "archive.json"
-SETTINGS_FILE = _data_dir() / "settings.json"
-FORECAST_AUDIT_FILE = _data_dir() / "forecast-audit.jsonl"
-NOTES_AUDIT_FILE = _data_dir() / "notes-audit.jsonl"
+LEGACY_DATA_DIR = _data_dir()
+data_repository = ResearchRepository(_research_data_dir())
+TICKERS_FILE = data_repository.operational_path("ticker_universe", "tickers.json", LEGACY_DATA_DIR / "tickers.json")
+SNAPSHOT_FILE = data_repository.operational_path("earnings_snapshot", "snapshot.json", LEGACY_DATA_DIR / "snapshot.json")
+ARCHIVE_FILE = data_repository.operational_path("earnings_archive", "archive.json", LEGACY_DATA_DIR / "archive.json")
+SETTINGS_FILE = data_repository.operational_path("app_settings", "settings.json", LEGACY_DATA_DIR / "settings.json")
+FORECAST_AUDIT_FILE = data_repository.operational_path("forecast_journal", "forecast-audit.jsonl", LEGACY_DATA_DIR / "forecast-audit.jsonl")
+NOTES_AUDIT_FILE = data_repository.operational_path("notes_journal", "notes-audit.jsonl", LEGACY_DATA_DIR / "notes-audit.jsonl")
 forecast_journal = AuditJournal(FORECAST_AUDIT_FILE)
 notes_journal = NotesJournal(NOTES_AUDIT_FILE)
 DEFAULT_TICKERS_VERSION = 2
@@ -1148,7 +1150,7 @@ def api_earnings_ticker(ticker: str):
 @app.route("/api/earnings/ticker/<ticker>/brief", methods=["GET", "POST"])
 def api_earnings_brief(ticker: str):
     ticker = ticker.strip().upper()
-    repository = ResearchRepository(_research_data_dir())
+    repository = data_repository
     key = os.environ.get("DEEPSEEK_API_KEY")
     cached = repository.cached_brief(ticker)
     if request.method == "GET":
@@ -1165,10 +1167,10 @@ def api_earnings_brief(ticker: str):
 
 @app.route("/api/research/storage")
 def api_research_storage():
-    repository = ResearchRepository(_research_data_dir())
+    repository = data_repository
     with repository.connect() as db:
         counts = {table: db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                  for table in ("earnings_briefs", "research_runs", "source_artifacts")}
+                  for table in ("earnings_briefs", "research_runs", "source_artifacts", "data_assets")}
     return jsonify({"root": str(repository.root), "database": str(repository.db_path), "counts": counts})
 
 

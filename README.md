@@ -26,10 +26,16 @@ Research data is stored outside Windows AppData under `data/research/`:
 - `earnings-research.sqlite3` catalogs cached briefs, runs, and source lineage.
 - `lake/bronze/` retains immutable tool/source snapshots.
 - `lake/curated/earnings-briefs/` retains human-readable brief JSON.
+- `lake/operational/` stores the ticker universe, current earnings snapshot,
+  accumulating event archive, settings, forecast journal, and notes journal.
 
 Set `EARNINGS_DATA_ROOT` in `.env` to move the database and lake to another
 drive. Existing AppData brief JSON is copied into this store on first use; the
 legacy files are left untouched.
+
+On first launch, the operational files are also copied from `%APPDATA%\earnings-cal`
+into the lake and registered in SQLite's `data_assets` catalog. The application
+then reads and writes the lake copies; legacy files remain as a rollback copy.
 
 ## Desktop App
 

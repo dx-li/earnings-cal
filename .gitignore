@@ -1,0 +1,16 @@
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+
+build/
+dist/
+build-research/
+dist-research/
+*.spec
+data/raw/
+
+.pytest_cache/
+.ruff_cache/
+.claude/
+.env

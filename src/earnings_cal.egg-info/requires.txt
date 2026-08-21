@@ -1,0 +1,8 @@
+flask>=3.0
+requests>=2.32
+yfinance>=0.2.50
+lxml>=5.0
+curl-cffi>=0.10
+pywebview>=5.0
+edgartools>=5.51.0
+python-dotenv>=1.2.3

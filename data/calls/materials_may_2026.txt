@@ -1,0 +1,81 @@
+$SHW
+ - L
+$PPG
+ - L
+$ECL
+ - L
+$ESI
+ - L
+$AVY
+ - S
+$FMC
+ - S
+
+$VMC
+ - S
+$AMRZ
+ - L
+$APD
+ S
+$AXTA
+ S
+$EMN
+ L
+$HUN
+ L
+$KWR
+ L
+$SW
+ S
+$IP
+ S
+$ATR
+ L
+$CRH
+ L
+$MLM
+ S
+$LIN
+ L
+$LYB
+ L
+
+$BALL
+  - L
+$DD
+  - S
+$GPK
+  - S
+$KNF
+  - L
+$WLK
+  - S
+$CBT
+  - S
+$CE
+  - L
+$CTVA
+  - L
+$FTK
+  - L?
+$IFF
+  - S
+$AMCR
+ - S
+$ALB
+ - L?
+$CF
+  -  L
+$NGVT
+ - L
+
+$AVNT
+ S
+$OLN
+ S
+$KOP
+ S
+$MOS
+ L
+$EXP
+ L

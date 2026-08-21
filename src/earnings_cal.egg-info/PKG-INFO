@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: earnings-cal
+Version: 0.1.0
+Summary: Earnings calendar for watched tickers
+Requires-Python: <3.13,>=3.11
+Requires-Dist: flask>=3.0
+Requires-Dist: requests>=2.32
+Requires-Dist: yfinance>=0.2.50
+Requires-Dist: lxml>=5.0
+Requires-Dist: curl-cffi>=0.10
+Requires-Dist: pywebview>=5.0
+Requires-Dist: edgartools>=5.51.0
+Requires-Dist: python-dotenv>=1.2.3

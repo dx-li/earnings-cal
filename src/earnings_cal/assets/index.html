@@ -1,0 +1,1336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Earnings Tracker</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #242935;
+    --text: #e6e8ee; --muted: #8a93a6; --accent: #6ea8fe;
+    --green: #5dd39e; --red: #ff6b6b; --yellow: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, system-ui, Segoe UI, Inter, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between;
+           padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--muted);
+         border: 1px solid transparent; font-size: 13px; }
+  .tab.active { background: var(--panel); color: var(--text); border-color: var(--border); }
+  main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+  .controls { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  input, button, textarea { font: inherit; color: var(--text); background: var(--panel);
+           border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b1020; border-color: var(--accent); font-weight: 600; }
+  .muted { color: var(--muted); font-size: 12px; }
+
+  /* Next up list */
+  .list { display: grid; gap: 8px; }
+  .row { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+         padding: 10px 14px; }
+  .row-top { display: grid;
+         grid-template-columns: 110px 1fr 210px 100px 1fr auto 40px; align-items: center; gap: 12px; }
+  .row-past { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border);
+              display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .session { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px;
+             background: #2a3142; color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .session.BMO { background: #1a3a2a; color: #7de3b4; }
+  .session.AMC { background: #3a2a1a; color: #ffc580; }
+  .stale { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px;
+           background: #3a2a1a; color: #ffc580; margin-left: 6px; vertical-align: middle; }
+  .beat { color: var(--green); }
+  .miss { color: var(--red); }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+  .moves { display: inline-flex; gap: 6px; align-items: center; }
+  .move { font-variant-numeric: tabular-nums; font-size: 11px; padding: 1px 5px;
+          border-radius: 3px; background: #20252f; }
+  .move .lbl { color: var(--muted); font-size: 9px; margin-right: 3px; }
+  .move .rel { color: var(--muted); font-size: 9px; margin-left: 4px; }
+  .ticker { font-weight: 700; font-size: 15px; }
+  .name { color: var(--muted); font-size: 12px; }
+  .date { font-variant-numeric: tabular-nums; font-size: 13px; }
+  .countdown { font-size: 12px; color: var(--muted); }
+  .countdown.soon { color: var(--yellow); }
+  .countdown.imminent { color: var(--red); font-weight: 600; }
+  .est { font-size: 12px; color: var(--muted); }
+  .del { background: transparent; border: none; color: var(--muted); cursor: pointer; }
+  .del:hover { color: var(--red); }
+  .err { color: var(--red); font-size: 11px; }
+
+  /* Calendar */
+  .cal-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .cal-legend { display: flex; align-items: center; gap: 12px; margin-left: auto;
+                color: var(--muted); font-size: 11px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 3px; border: 1px solid; }
+  .legend-dot.BMO { background: #1a4935; border-color: #34785a; }
+  .legend-dot.AMC { background: #593719; border-color: #9b6530; }
+  .legend-dot.DMH { background: #253b63; border-color: #496da8; }
+  .cal-title { font-size: 16px; font-weight: 600; min-width: 180px; text-align: center; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-head { color: var(--muted); font-size: 11px; text-align: center; padding: 6px 0;
+              text-transform: uppercase; letter-spacing: 0.5px; }
+  .cal-cell { background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+              min-height: 92px; padding: 6px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+  .cal-cell.other { opacity: 0.35; }
+  .cal-cell.today { border-color: var(--accent); }
+  .cal-cell-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .cal-date { font-size: 11px; color: var(--muted); }
+  .cal-cell.today .cal-date { color: var(--accent); font-weight: 700; }
+  .benchmarks { display: grid; gap: 1px; justify-items: end; }
+  .bench { font-size: 9px; font-variant-numeric: tabular-nums; color: var(--muted); line-height: 1.15; }
+  .bench .lbl { color: var(--muted); margin-right: 3px; }
+  .pill { background: #232836; border: 1px solid #2e3446; border-radius: 4px;
+          padding: 2px 5px; font-size: 11px; font-weight: 600; cursor: pointer; user-select: none; }
+  .pill:hover { border-color: var(--accent); background: #2a3142; }
+  .pill.BMO { background: #1a4935; border-color: #34785a; color: #a4f0ca; }
+  .pill.BMO:hover { background: #205840; border-color: #62b78d; }
+  .pill.AMC { background: #593719; border-color: #9b6530; color: #ffd09a; }
+  .pill.AMC:hover { background: #69421e; border-color: #d0924f; }
+  .pill.DMH { background: #253b63; border-color: #496da8; color: #b9d2ff; }
+  .pill.DMH:hover { background: #2c4777; border-color: #73a0e5; }
+  .pill.past { opacity: 0.6; }
+
+  /* Popover */
+  .pop-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; }
+  .pop { position: fixed; z-index: 51; background: var(--panel); border: 1px solid var(--border);
+         border-radius: 8px; padding: 14px 16px; min-width: 360px; max-width: 440px;
+         box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+  .pop h3 { margin: 0 0 2px; font-size: 15px; }
+  .pop .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .pop dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; margin: 0; font-size: 12px; }
+  .pop dt { color: var(--muted); }
+  .pop dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .returns { display: grid; gap: 5px; margin-top: 2px; }
+  .ret-row { display: grid; grid-template-columns: 42px 1fr 1fr; gap: 8px; align-items: center; }
+  .ret-head { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+  .ret-label { color: var(--muted); }
+  .ret-box { display: flex; justify-content: space-between; gap: 6px; background: #20252f;
+             border-radius: 4px; padding: 3px 6px; }
+  .ret-box span:first-child { color: var(--muted); }
+  .pop .close { position: absolute; top: 8px; right: 10px; background: transparent;
+                border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+  .pop .close:hover { color: var(--text); }
+  .day-pop { max-width: 440px; width: min(440px, calc(100vw - 16px)); }
+  .day-list { display: grid; gap: 6px; max-height: min(70vh, 560px); overflow: auto; padding-right: 2px; }
+  .day-item { display: grid; grid-template-columns: 64px 1fr auto; gap: 8px; align-items: center;
+              border: 1px solid var(--border); border-radius: 6px; padding: 7px 8px; cursor: pointer; }
+  .day-item:hover { border-color: var(--accent); background: #20252f; }
+  .day-item .when { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .day-item .company { min-width: 0; }
+  .day-item .company .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Settings */
+  textarea { width: 100%; min-height: 220px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .hidden { display: none; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  .forecast-modal { width: min(620px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
+    overflow: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .forecast-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .forecast-grid label, .forecast-notes { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+  .forecast-grid input, .forecast-grid select, .forecast-notes textarea { min-width: 0; padding: 7px; }
+  .forecast-notes { margin-top: 10px; }
+  .forecast-notes textarea { min-height: 72px; resize: vertical; }
+  .audit-list { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .audit-item { padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
+  .audit-item .hash { color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; }
+  .tracker-table { display: grid; gap: 8px; }
+  .tracker-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .econ-pill { background: #4a2458; border: 1px solid #85449a; color: #edc2fa;
+               border-radius: 4px; padding: 2px 5px; font-size: 10px; cursor: default; }
+  .notes-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .notes-toolbar select { min-width: 150px; }
+  .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .note-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 13px; }
+  .note-card h3 { margin: 4px 0 8px; font-size: 14px; }
+  .note-card .body { white-space: pre-wrap; font-size: 12px; line-height: 1.45; max-height: 180px; overflow: auto; }
+  .note-meta, .note-tags { color: var(--muted); font-size: 11px; }
+  .note-tags { margin-top: 9px; }
+  .note-modal { width: min(650px, calc(100vw - 24px)); max-width: 650px; left: 50%; top: 50%;
+                transform: translate(-50%, -50%); max-height: calc(100vh - 24px); overflow: auto; }
+  .econ-toggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+                 color: var(--muted); font-size: 11px; }
+  .econ-toggle input { width: auto; }
+  .econ-dashboard { display: grid; gap: 8px; }
+  .econ-row { display: grid; grid-template-columns: 150px 130px 1fr 120px;
+              gap: 12px; align-items: center; background: var(--panel);
+              border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .econ-country { font-size: 12px; color: #edc2fa; }
+  .econ-source { color: var(--muted); font-size: 10px; }
+  .econ-official-time { color: #edc2fa; font-size: 10px; margin-top: 3px; }
+  .analytics-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .analytics-head select { color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 9px; margin-bottom: 18px; }
+  .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .metric-card .label { color: var(--muted); font-size: 11px; }
+  .metric-card .value { font-size: 23px; font-weight: 650; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+  .metric-card .compare { color: var(--muted); font-size: 10px; }
+  .analytics-section { margin: 18px 0 8px; font-size: 14px; }
+  .reaction-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .reaction-table th, .reaction-table td { padding: 9px 11px; border-bottom: 1px solid var(--border); text-align: right; font-size: 12px; }
+  .reaction-table th:first-child, .reaction-table td:first-child { text-align: left; }
+  .reaction-table th { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+  .trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 10px; }
+  .trend-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; }
+  .trend-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .trend-sub { color: var(--muted); font-size: 10px; margin-bottom: 8px; }
+  .trend-card svg { display: block; width: 100%; height: 170px; overflow: visible; }
+  .chart-grid { stroke: var(--border); stroke-width: 1; }
+  .chart-label { fill: var(--muted); font-size: 9px; }
+  .chart-line { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart-dot { stroke: var(--panel); stroke-width: 2; }
+  .chart-legend { display: flex; gap: 14px; color: var(--muted); font-size: 10px; margin-top: 5px; }
+  .chart-key { display: inline-flex; gap: 5px; align-items: center; }
+  .chart-key i { width: 14px; height: 2px; display: inline-block; }
+  .window-cell { font-variant-numeric: tabular-nums; }
+  .window-cell small { display: block; color: var(--muted); font-size: 9px; margin-top: 2px; }
+  .company-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .company-head select { min-width: 220px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+  .company-head .period-select { min-width: 76px; }
+  .brief-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:12px 0 18px; }
+  .brief-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:13px; }
+  .brief-card h4 { margin:0 0 7px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .brief-card p { margin:0 0 8px; line-height:1.45; }
+  .brief-card ul { margin:0; padding-left:18px; }
+  .brief-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; }
+  @media(max-width:760px){.brief-grid{grid-template-columns:1fr}}
+  .tape-shell { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 14px; margin-bottom: 12px; }
+  .tape-title { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .tape-title strong { font-size: 14px; }
+  .tape-chart { width: 100%; height: 310px; display: block; margin-top: 8px; }
+  .tape-band { fill: var(--accent); opacity: .08; }
+  .tape-event { stroke: #667085; stroke-width: 1; stroke-dasharray: 3 3; }
+  .tape-axis { stroke: var(--border); stroke-width: 1; }
+  .tape-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .tape-line.stock { stroke-width: 3; }
+  .tape-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; color: var(--muted); font-size: 10px; }
+  .tape-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 10px 0 16px; }
+  .tape-stat { background: #20252f; border-radius: 6px; padding: 9px 10px; }
+  .tape-stat .k { color: var(--muted); font-size: 10px; }
+  .tape-stat .v { font-size: 16px; font-weight: 650; margin-top: 2px; }
+  .period-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 9px; }
+  .period-card { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .period-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--muted); }
+  .period-card.double-beat::before { background: var(--green); }
+  .period-card.double-miss::before { background: var(--red); }
+  .period-card.mixed::before { background: var(--yellow); }
+  .period-card.upcoming::before { background: var(--accent); }
+  .period-label { font-weight: 650; font-size: 14px; }
+  .period-date { color: var(--muted); font-size: 10px; margin: 2px 0 10px; }
+  .period-result { display: grid; grid-template-columns: 48px 1fr; gap: 3px 7px; font-size: 11px; }
+  .period-result span:nth-child(odd) { color: var(--muted); }
+  .period-moves { display: flex; gap: 5px; margin-top: 10px; }
+  .period-moves .move { flex: 1; text-align: center; }
+  @media (max-width: 760px) {
+    .econ-row { grid-template-columns: 1fr; gap: 4px; }
+    .cal-legend { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Earnings Tracker</h1>
+  <div class="tabs">
+    <div class="tab active" data-view="next">Next up</div>
+    <div class="tab" data-view="cal">Calendar</div>
+    <div class="tab" data-view="econ">Economic</div>
+    <div class="tab" data-view="analytics">Analytics</div>
+    <div class="tab" data-view="company">Company</div>
+    <div class="tab" data-view="tracker">Tracker</div>
+    <div class="tab" data-view="notes">Notes</div>
+    <div class="tab" data-view="settings">Tickers</div>
+  </div>
+</header>
+
+<main>
+  <div class="controls">
+    <button id="refresh">↻ Refresh</button>
+    <span class="muted" id="status"></span>
+  </div>
+
+  <section id="view-next">
+    <div class="list" id="list"></div>
+  </section>
+
+  <section id="view-cal" class="hidden">
+    <div class="cal-nav">
+      <button id="prevMonth">‹</button>
+      <div class="cal-title" id="calTitle"></div>
+      <button id="nextMonth">›</button>
+      <button id="todayBtn">Today</button>
+      <label class="econ-toggle"><input type="checkbox" id="showEconomic">Show economic releases</label>
+      <div class="cal-legend" aria-label="Earnings session colors">
+        <span class="legend-item"><span class="legend-dot BMO"></span>Before open</span>
+        <span class="legend-item"><span class="legend-dot AMC"></span>After close</span>
+        <span class="legend-item"><span class="legend-dot DMH"></span>During market</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#4a2458;border-color:#85449a"></span>Economic</span>
+      </div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </section>
+  <section id="view-econ" class="hidden">
+    <div class="notes-toolbar">
+      <button id="reloadEconomic">Refresh economic calendar</button>
+      <select id="econCountry"><option value="">All regions</option></select>
+      <span id="econStatus" class="muted"></span>
+    </div>
+    <div id="econList" class="econ-dashboard"></div>
+  </section>
+  <section id="view-analytics" class="hidden">
+    <div class="analytics-head">
+      <select id="analyticsQuarter" aria-label="Earnings season"></select>
+      <span id="analyticsStatus" class="muted"></span>
+    </div>
+    <div id="analyticsView"></div>
+  </section>
+  <section id="view-company" class="hidden">
+    <div class="company-head">
+      <select id="companyTicker" aria-label="Company"></select>
+      <select id="companyPeriod" class="period-select" aria-label="Chart range"><option value="ytd" selected>YTD</option><option value="1y">1Y</option><option value="3y">3Y</option><option value="5y">5Y</option></select>
+      <span id="companySummary" class="muted"></span>
+    </div>
+    <div id="companyView"></div>
+  </section>
+
+  <section id="view-settings" class="hidden">
+    <p class="muted">One ticker per line. Saving refetches earnings data.</p>
+    <textarea id="tickerList" spellcheck="false"></textarea>
+    <div class="controls" style="margin-top: 10px;">
+      <button class="primary" id="saveTickers">Save</button>
+      <span class="muted" id="saveStatus"></span>
+    </div>
+  </section>
+  <section id="view-tracker" class="hidden">
+    <div class="controls"><button id="reloadTracker">Refresh tracker</button><span id="auditStatus" class="muted"></span></div>
+    <div id="trackerList" class="tracker-table"></div>
+  </section>
+  <section id="view-notes" class="hidden">
+    <div class="notes-toolbar">
+      <button class="primary" id="newNote">New note</button>
+      <select id="notesTicker"><option value="">All companies</option></select>
+      <select id="notesQuarter"><option value="">All calendar quarters</option></select>
+      <span id="notesAuditStatus" class="muted"></span>
+    </div>
+    <div id="notesList" class="notes-grid"></div>
+  </section>
+</main>
+
+<script>
+let earnings = [];
+let loadSeq = 0;
+let benchmarkReturns = {XLB:{}, XLI:{}, SPY:{}};
+let benchmarkRangeKey = '';
+let economicEvents = [];
+let economicRangeKey = '';
+let economicDashboardPayload = null;
+let economicDashboardRangeKey = '';
+let showEconomicOnCalendar = localStorage.getItem('showEconomicOnCalendar') === 'true';
+let tapeCache = {};
+let tapeSeq = 0;
+let viewDate = new Date();
+viewDate.setDate(1);
+
+const $ = (s) => document.querySelector(s);
+const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const fmt = (iso) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+};
+const fmtPct = (v) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+const moveClass = (v) => v == null ? '' : (v >= 0 ? 'up' : 'down');
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const calKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+function renderMoves(ev) {
+  if (!ev) return '';
+  const help = ev.session === 'AMC'
+    ? 'D0 is the next trading day for after-close reports'
+    : 'D0 is the report-date trading session';
+  const parts = [
+    {lbl: 'D-1', val: ev.move_before},
+    {lbl: 'D0',  val: ev.move_day},
+    {lbl: 'D+1', val: ev.move_after},
+  ];
+  if (parts.every(p => p.val == null)) return '';
+  return `<span class="moves">` + parts.map(p =>
+    `<span class="move" title="${help}"><span class="lbl">${p.lbl}</span><span class="${moveClass(p.val)}">${fmtPct(p.val)}</span></span>`
+  ).join('') + `</span>`;
+}
+const daysUntil = (iso) => {
+  if (!iso) return null;
+  const ms = new Date(iso) - new Date();
+  return Math.round(ms / 86400000);
+};
+
+function renderAll() {
+  renderNext();
+  renderCalendar();
+  if (!$('#view-analytics').classList.contains('hidden')) loadAnalytics();
+  if (!$('#view-company').classList.contains('hidden')) renderCompany();
+}
+
+let analyticsTimer = null;
+async function loadAnalytics() {
+  clearTimeout(analyticsTimer);
+  analyticsTimer = setTimeout(async () => {
+    const selected = $('#analyticsQuarter').value;
+    $('#analyticsStatus').textContent = 'Calculating...';
+    const query = selected ? `?quarter=${encodeURIComponent(selected)}` : '';
+    const response = await fetch(`/api/analytics/season${query}`);
+    const data = await response.json();
+    renderAnalytics(data);
+  }, 80);
+}
+
+function renderAnalytics(data) {
+  const box = $('#analyticsView');
+  const select = $('#analyticsQuarter');
+  if (!data.current) {
+    box.innerHTML = '<div class="empty">No completed earnings with archived results yet.</div>';
+    $('#analyticsStatus').textContent = '';
+    return;
+  }
+  const currentSelection = data.current.quarter;
+  select.innerHTML = data.quarters.map(q => `<option ${q === currentSelection ? 'selected' : ''}>${esc(q)}</option>`).join('');
+  const c = data.current, p = data.previous;
+  $('#analyticsStatus').textContent = `${c.events} archived reports · compared with ${p ? p.quarter : 'no prior season'}`;
+  const pct = v => v == null ? '—' : `${v.toFixed(1)}%`;
+  const delta = (now, prior, suffix=' pts') => now == null || prior == null ? 'No prior comparison' : `${now-prior >= 0 ? '+' : ''}${(now-prior).toFixed(1)}${suffix} vs ${p.quarter}`;
+  const card = (label, value, comparison, cls='') => `<div class="metric-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div><div class="compare">${comparison}</div></div>`;
+  const prior = path => p ? path(p) : null;
+  const reactionRows = [
+    ['All reports', 'all'], ['EPS beat', 'eps_beat'], ['EPS miss', 'eps_miss'],
+    ['Revenue beat', 'revenue_beat'], ['Revenue miss', 'revenue_miss'],
+    ['Double beat', 'double_beat'], ['Double miss', 'double_miss'],
+  ].map(([label, key]) => {
+    const w = c.windows[key];
+    const cell = stat => `<td class="window-cell ${moveClass(stat.average)}">${fmtPct(stat.average)}<small>n=${stat.n} · ${pct(stat.positive_pct)} positive</small></td>`;
+    return `<tr><td>${label}</td>${cell(w.before)}${cell(w.day)}${cell(w.after)}</tr>`;
+  }).join('');
+  const trendChart = (title, subtitle, series, minY, maxY, suffix) => {
+    const seasons = (data.history || []).slice(-8);
+    const W=420, H=145, L=34, R=10, T=10, B=25, iw=W-L-R, ih=H-T-B;
+    const x = i => seasons.length < 2 ? L+iw/2 : L + i*iw/(seasons.length-1);
+    const y = value => T + (maxY-value)*ih/(maxY-minY);
+    const ticks = [minY, (minY+maxY)/2, maxY];
+    const grid = ticks.map(v => `<line class="chart-grid" x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}"/><text class="chart-label" x="${L-5}" y="${y(v)+3}" text-anchor="end">${v}${suffix}</text>`).join('');
+    const labels = seasons.map((s,i) => `<text class="chart-label" x="${x(i)}" y="${H-4}" text-anchor="middle">${s.quarter.replace('20','’').replace(' Q','Q')}</text>`).join('');
+    const lines = series.map(item => {
+      const points = seasons.map((s,i) => ({x:x(i), yv:item.value(s)})).filter(p => p.yv != null);
+      const path = points.map((p,i) => `${i?'L':'M'}${p.x},${y(Math.max(minY,Math.min(maxY,p.yv)))}`).join(' ');
+      const dots = points.map(p => `<circle class="chart-dot" cx="${p.x}" cy="${y(Math.max(minY,Math.min(maxY,p.yv)))}" r="3.5" fill="${item.color}"><title>${p.yv.toFixed(1)}${suffix}</title></circle>`).join('');
+      return `<path class="chart-line" stroke="${item.color}" d="${path}"/>${dots}`;
+    }).join('');
+    const legend = series.map(item => `<span class="chart-key"><i style="background:${item.color}"></i>${item.label}</span>`).join('');
+    return `<div class="trend-card"><div class="trend-title">${title}</div><div class="trend-sub">${subtitle}</div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}">${grid}${labels}${lines}</svg><div class="chart-legend">${legend}</div></div>`;
+  };
+  const trends = `<div class="trend-grid">
+    ${trendChart('Beat breadth by season', 'Share of reports beating consensus', [
+      {label:'EPS', color:'#5dd39e', value:s=>s.eps.beat.pct}, {label:'Revenue', color:'#6ea8fe', value:s=>s.revenue.beat.pct}
+    ], 0, 100, '%')}
+    ${trendChart('Average earnings reaction', 'Equal-weight stock return around each report', [
+      {label:'D0', color:'#ffd166', value:s=>s.windows.all.day.average}, {label:'D+1', color:'#b28dff', value:s=>s.windows.all.after.average}
+    ], -5, 5, '%')}
+  </div>`;
+  box.innerHTML = `
+    <div class="metric-grid">
+      ${card('EPS beat rate', pct(c.eps.beat.pct), `${c.eps.beat.count}/${c.eps.beat.n} · ${delta(c.eps.beat.pct, prior(x=>x.eps.beat.pct))}`, 'beat')}
+      ${card('Revenue beat rate', pct(c.revenue.beat.pct), `${c.revenue.beat.count}/${c.revenue.beat.n} · ${delta(c.revenue.beat.pct, prior(x=>x.revenue.beat.pct))}`, 'beat')}
+      ${card('Double beats', pct(c.double_beat.pct), `${c.double_beat.count}/${c.double_beat.n} with both estimates · ${delta(c.double_beat.pct, prior(x=>x.double_beat.pct))}`)}
+      ${card('Double misses', pct(c.double_miss.pct), `${c.double_miss.count}/${c.double_miss.n} with both estimates · ${delta(c.double_miss.pct, prior(x=>x.double_miss.pct))}`)}
+      ${card('Average D0 reaction', fmtPct(c.reaction.all.average), `${c.reaction.all.n} reports · ${delta(c.reaction.all.average, prior(x=>x.reaction.all.average), '%')}`, moveClass(c.reaction.all.average))}
+      ${card('Perfect EPS foresight', fmtPct(c.oracle_eps.average), `Long beats / short misses, equal-weight D0 · n=${c.oracle_eps.n}`, moveClass(c.oracle_eps.average))}
+    </div>
+    <h3 class="analytics-section">Across seasons</h3>
+    ${trends}
+    <h3 class="analytics-section">How the market reacted</h3>
+    <table class="reaction-table"><thead><tr><th>Outcome</th><th>D-1 drift</th><th>D0 reaction</th><th>D+1 follow-through</th></tr></thead><tbody>${reactionRows}</tbody></table>
+    <h3 class="analytics-section">Leakage and follow-through</h3>
+    <div class="metric-grid">
+      ${card('Pre-report drift · eventual beats', fmtPct(c.pre_drift.eps_beat.average), `D-1 average · n=${c.pre_drift.eps_beat.n}`, moveClass(c.pre_drift.eps_beat.average))}
+      ${card('Pre-report drift · eventual misses', fmtPct(c.pre_drift.eps_miss.average), `D-1 average · n=${c.pre_drift.eps_miss.n}`, moveClass(c.pre_drift.eps_miss.average))}
+      ${card('Next-day follow-through · beats', fmtPct(c.follow_through.eps_beat.average), `D+1 average · n=${c.follow_through.eps_beat.n}`, moveClass(c.follow_through.eps_beat.average))}
+      ${card('Next-day follow-through · misses', fmtPct(c.follow_through.eps_miss.average), `D+1 average · n=${c.follow_through.eps_miss.n}`, moveClass(c.follow_through.eps_miss.average))}
+      ${card('Average XLB-relative D0', fmtPct(c.relative_reaction.average), `Stock return minus XLB · n=${c.relative_reaction.n}`, moveClass(c.relative_reaction.average))}
+    </div>
+    <p class="muted">D-1 is the trading session immediately before the reaction session. D0 is the report-day close-to-close move for BMO/DMH reports and the next trading day for AMC reports. D+1 is the following session. “Perfect EPS foresight” is hypothetical and excludes inline or missing-consensus reports. Reaction charts are clipped at ±5% to keep seasons comparable; hover a point for its exact value.</p>`;
+}
+
+function upsertEarnings(entry) {
+  const idx = earnings.findIndex(e => e.ticker === entry.ticker);
+  if (idx >= 0) earnings[idx] = entry;
+  else earnings.push(entry);
+}
+
+async function runLimited(items, limit, worker) {
+  let next = 0;
+  const runners = Array.from({length: Math.min(limit, items.length)}, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
+async function loadEarnings(refresh = false) {
+  const seq = ++loadSeq;
+  $('#status').textContent = 'Loading…';
+  $('#status').textContent = refresh ? 'Refreshing cached view...' : 'Loading cached view...';
+  const cachedResp = await fetch('/api/earnings/cached');
+  if (seq !== loadSeq) return;
+  earnings = await cachedResp.json();
+  renderAll();
+
+  const tickers = earnings.map(e => e.ticker);
+  let done = 0;
+  $('#status').textContent = `Showing cached data - updating 0/${tickers.length}`;
+
+  await runLimited(tickers, 6, async (ticker) => {
+    try {
+      const suffix = refresh ? '?refresh=1' : '';
+      const r = await fetch(`/api/earnings/ticker/${encodeURIComponent(ticker)}${suffix}`);
+      const live = await r.json();
+      if (seq !== loadSeq) return;
+      upsertEarnings(live);
+    } catch (err) {
+      if (seq !== loadSeq) return;
+      const cur = earnings.find(e => e.ticker === ticker);
+      if (cur) cur.error = String(err);
+    } finally {
+      if (seq !== loadSeq) return;
+      done += 1;
+      $('#status').textContent = `Showing cached data - updating ${done}/${tickers.length}`;
+      renderAll();
+    }
+  });
+
+  if (seq === loadSeq) $('#status').textContent = `${earnings.length} tickers - live`;
+}
+
+function renderNext() {
+  const list = $('#list');
+  // Sort by next_date (ISO with time => BMO sorts before AMC same day).
+  // Tie-break: BMO < DMH < AMC < unknown, then ticker.
+  const sessRank = (s) => ({BMO: 0, DMH: 1, AMC: 2}[s] ?? 3);
+  const sorted = [...earnings].sort((a, b) => {
+    if (!a.next_date) return 1;
+    if (!b.next_date) return -1;
+    const c = a.next_date.localeCompare(b.next_date);
+    if (c !== 0) return c;
+    const s = sessRank(a.next_session) - sessRank(b.next_session);
+    if (s !== 0) return s;
+    return a.ticker.localeCompare(b.ticker);
+  });
+  if (!sorted.length) {
+    list.innerHTML = '<div class="empty">No tickers. Add some in the Tickers tab.</div>';
+    return;
+  }
+  const fmtRev = (v) => v == null ? null : (Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(2)}B` : `$${(v/1e6).toFixed(0)}M`);
+  const beatClass = (est, rep) => (est == null || rep == null) ? '' : (rep >= est ? 'beat' : 'miss');
+
+  list.innerHTML = sorted.map(e => {
+    const d = daysUntil(e.next_date);
+    let cd = '';
+    if (d !== null) {
+      if (d < 0) cd = `${-d}d ago`;
+      else if (d === 0) cd = 'Today';
+      else if (d === 1) cd = 'Tomorrow';
+      else cd = `in ${d} days`;
+    }
+    const cdClass = d !== null && d >= 0 && d <= 3 ? 'imminent' : (d !== null && d >= 0 && d <= 14 ? 'soon' : '');
+    const sess = e.next_session ? `<span class="session ${e.next_session}">${e.next_session}</span>` : '';
+    let staleBadge = '';
+    if (e.loading && e.from_snapshot) {
+      staleBadge = `<span class="stale" title="Showing cached data while live refresh runs">cached</span>`;
+    } else if (e.from_snapshot) {
+      const age = e.snapshot_age_seconds || 0;
+      const txt = age < 3600 ? `${Math.round(age/60)}m` : age < 86400 ? `${Math.round(age/3600)}h` : `${Math.round(age/86400)}d`;
+      staleBadge = `<span class="stale" title="Live fetch failed; showing snapshot from ${txt} ago">cached ${txt}</span>`;
+    }
+    const epsEst = e.eps_estimate != null ? `EPS est <b>${e.eps_estimate.toFixed(2)}</b>` : '';
+    const revEst = e.revenue_estimate != null ? `Rev est <b>${fmtRev(e.revenue_estimate)}</b>` : '';
+    const err = e.error && !e.next_date ? `<div class="err">${e.error}</div>` : '';
+
+    const last = (e.past || [])[0];
+    let pastLine = '';
+    if (last) {
+      const dt = new Date(last.date).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'2-digit'});
+      const bits = [`<span>Last: ${dt}</span>`];
+      if (last.eps_estimate != null || last.eps_reported != null) {
+        const est = last.eps_estimate != null ? last.eps_estimate.toFixed(2) : '—';
+        const rep = last.eps_reported != null ? last.eps_reported.toFixed(2) : '—';
+        const cls = beatClass(last.eps_estimate, last.eps_reported);
+        const surp = last.eps_surprise_pct != null ? ` (${last.eps_surprise_pct > 0 ? '+' : ''}${last.eps_surprise_pct.toFixed(1)}%)` : '';
+        bits.push(`<span>EPS: est ${est} vs rep <span class="${cls}">${rep}</span>${surp}</span>`);
+      }
+      if (last.revenue_estimate != null || last.revenue_reported != null) {
+        const est = last.revenue_estimate != null ? fmtRev(last.revenue_estimate) : '—';
+        const rep = last.revenue_reported != null ? fmtRev(last.revenue_reported) : '—';
+        const cls = beatClass(last.revenue_estimate, last.revenue_reported);
+        const surp = last.revenue_surprise_pct != null
+          ? ` (${last.revenue_surprise_pct > 0 ? '+' : ''}${last.revenue_surprise_pct.toFixed(1)}%)` : '';
+        bits.push(`<span>Rev: est ${est} vs rep <span class="${cls}">${rep}</span>${surp}</span>`);
+      }
+      const movesHtml = renderMoves(last);
+      if (movesHtml) bits.push(movesHtml);
+      pastLine = `<div class="row-past">${bits.join('')}</div>`;
+    }
+
+    return `
+      <div class="row">
+        <div class="row-top">
+          <div>
+            <div class="ticker">${e.ticker}${sess}${staleBadge}</div>
+            <div class="name">${e.name || ''}</div>
+          </div>
+          <div>${err}</div>
+          <div class="date">${fmt(e.next_date)}</div>
+          <div class="countdown ${cdClass}">${cd}</div>
+          <div class="est">${[epsEst, revEst].filter(Boolean).join(' · ')}</div>
+          ${e.next_date ? `<button class="forecast" data-ticker="${e.ticker}">Forecast</button>` : ''}
+          <button class="del" title="Remove" data-ticker="${e.ticker}">✕</button>
+        </div>
+        ${pastLine}
+      </div>
+    `;
+  }).join('');
+  list.querySelectorAll('.del').forEach(b => b.addEventListener('click', () => removeTicker(b.dataset.ticker)));
+  list.querySelectorAll('.forecast').forEach(b => b.addEventListener('click', () => {
+    const company = earnings.find(e => e.ticker === b.dataset.ticker);
+    if (company) showForecastModal(company.ticker, company.name, {
+      date: company.next_date, eps_estimate: company.eps_estimate,
+      revenue_estimate: company.revenue_estimate, session: company.next_session,
+      fiscal_period: (company.upcoming || [])[0]?.fiscal_period
+    });
+  }));
+}
+
+async function removeTicker(ticker) {
+  const r = await fetch('/api/tickers');
+  const cur = await r.json();
+  const next = cur.filter(t => t !== ticker);
+  await fetch('/api/tickers', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({tickers: next})
+  });
+  await loadEarnings();
+  await loadTickerList();
+}
+
+async function ensureBenchmarkRange(start, end) {
+  const rangeKey = `${isoDay(start)}:${isoDay(end)}`;
+  if (benchmarkRangeKey === rangeKey) return;
+  benchmarkRangeKey = rangeKey;
+  try {
+    const results = await Promise.all(['XLB','XLI','SPY'].map(async ticker => {
+      const r = await fetch(`/api/benchmark/${ticker.toLowerCase()}?start=${isoDay(start)}&end=${isoDay(end)}`);
+      return [ticker, await r.json()];
+    }));
+    results.forEach(([ticker, data]) => benchmarkReturns[ticker] = {...benchmarkReturns[ticker], ...(data.returns || {})});
+    if (benchmarkRangeKey === rangeKey) renderCalendar();
+  } catch (err) {
+    // Keep the calendar usable if the benchmark fetch fails.
+  }
+}
+
+async function ensureEconomicRange(start, end) {
+  const rangeKey = `${isoDay(start)}:${isoDay(end)}`;
+  if (economicRangeKey === rangeKey) return;
+  economicRangeKey = rangeKey;
+  try {
+    const response = await fetch(`/api/economic-releases?start=${isoDay(start)}&end=${isoDay(end)}`);
+    const payload = await response.json();
+    economicEvents = payload.events || [];
+    if (economicRangeKey === rangeKey) renderCalendar();
+  } catch (err) {
+    economicEvents = [];
+  }
+}
+
+function renderBenchmark(isoKey) {
+  const rows = ['XLB','XLI','SPY'].map(ticker => {
+    const v = benchmarkReturns[ticker]?.[isoKey];
+    return v == null ? '' : `<span class="bench" title="${ticker} daily return"><span class="lbl">${ticker}</span> <span class="${moveClass(v)}">${fmtPct(v)}</span></span>`;
+  }).filter(Boolean);
+  return rows.length ? `<span class="benchmarks">${rows.join('')}</span>` : '';
+}
+
+function renderCompany() {
+  const select = $('#companyTicker');
+  const prior = select.value;
+  const sorted = [...earnings].sort((a,b) => a.ticker.localeCompare(b.ticker));
+  select.innerHTML = sorted.map(e => `<option value="${esc(e.ticker)}">${esc(e.ticker)} · ${esc(e.name || '')}</option>`).join('');
+  if (prior && sorted.some(e => e.ticker === prior)) select.value = prior;
+  const company = sorted.find(e => e.ticker === select.value) || sorted[0];
+  const view = $('#companyView');
+  if (!company) { view.innerHTML = '<div class="empty">Add a ticker to see its earnings history.</div>'; return; }
+  const events = [...(company.upcoming || []).map(e=>({...e, upcoming:true})), ...(company.past || [])]
+    .sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  $('#companySummary').textContent = `${events.filter(e=>!e.upcoming).length} completed reports in the local archive`;
+  const outcome = (est, rep) => est == null || rep == null ? null : rep > est ? 'beat' : rep < est ? 'miss' : 'inline';
+  const number = v => v == null ? '—' : Number(v).toFixed(2);
+  const surprise = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`;
+  view.innerHTML = `<div id="tapeView" class="tape-shell"><div class="muted">Loading price tape…</div></div><div id="peerStats"></div><div id="earningsBrief"><div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3><button onclick="loadEarningsBrief('${esc(company.ticker)}',true)">Research / refresh</button></div><div class="muted">Loading saved research…</div></div><h3 class="analytics-section">Earnings periods</h3><div class="period-strip">${events.map(ev => {
+    const eps = outcome(ev.eps_estimate, ev.eps_reported), rev = outcome(ev.revenue_estimate, ev.revenue_reported);
+    const state = ev.upcoming ? 'upcoming' : eps === 'beat' && rev === 'beat' ? 'double-beat' : eps === 'miss' && rev === 'miss' ? 'double-miss' : 'mixed';
+    const label = ev.fiscal_period || (() => { const d=new Date(ev.date); return `${d.getFullYear()} Q${Math.floor(d.getMonth()/3)+1}`; })();
+    const moves = [['D-1',ev.move_before],['D0',ev.move_day],['D+1',ev.move_after]].map(([k,v]) => `<span class="move"><span class="lbl">${k}</span> <span class="${moveClass(v)}">${fmtPct(v)}</span></span>`).join('');
+    return `<article class="period-card ${state}"><div class="period-label">${esc(label)} ${ev.upcoming ? '<span class="session">UPCOMING</span>' : ''}</div><div class="period-date">${fmt(ev.date)} · ${esc(ev.session || 'time TBD')}</div><div class="period-result"><span>EPS</span><span class="${eps||''}">${number(ev.eps_reported)} vs ${number(ev.eps_estimate)} · ${surprise(ev.eps_surprise_pct)}</span><span>Revenue</span><span class="${rev||''}">${surprise(ev.revenue_surprise_pct)} surprise</span></div>${ev.upcoming ? '' : `<div class="period-moves">${moves}</div>`}</article>`;
+  }).join('')}</div>`;
+  loadTape(company);
+  loadEarningsBrief(company.ticker, false);
+}
+
+async function loadEarningsBrief(ticker, refresh) {
+  const box=$('#earningsBrief'); if(!box) return;
+  if(refresh) box.innerHTML='<div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3></div><div class="muted">Reading filings and transcript…</div>';
+  try {
+    const response=await fetch(`/api/earnings/ticker/${encodeURIComponent(ticker)}/brief`,{method:refresh?'POST':'GET'});
+    if(response.status===404){box.innerHTML=`<div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3><button onclick="loadEarningsBrief('${esc(ticker)}',true)">Research latest earnings</button></div><div class="empty">No brief generated yet.</div>`;return}
+    const d=await response.json(); if(!response.ok) throw new Error(d.error||'Research failed');
+    const card=(title,section)=>`<article class="brief-card"><h4>${title}</h4><p>${esc(section?.summary||'Not disclosed')}</p><ul>${(section?.drivers||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></article>`;
+    box.innerHTML=`<div class="brief-head"><div><h3 class="analytics-section">Latest earnings drivers</h3><div class="muted">${esc(d.period||'Latest report')} · generated ${fmt(d.generated_at)}</div></div><button onclick="loadEarningsBrief('${esc(ticker)}',true)">Refresh research</button></div><p><strong>${esc(d.verdict||'')}</strong></p><div class="brief-grid">${card('Top line',d.top_line)}${card('Bottom line',d.bottom_line)}${card('Cash flow & inventory',d.cash_inventory)}</div><details><summary>Sources, watch items & limitations</summary><p>${(d.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(' · ')}</p><ul>${[...(d.watch_items||[]),...(d.limitations||[]).map(x=>`Limitation: ${x}`)].map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`;
+  } catch(err) { box.innerHTML=`<div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3><button onclick="loadEarningsBrief('${esc(ticker)}',true)">Retry</button></div><div class="empty">${esc(err.message)}</div>`; }
+}
+
+function groupTapeStats(company) {
+  const outcome = ev => ev.eps_estimate == null || ev.eps_reported == null ? null : ev.eps_reported > ev.eps_estimate ? 'beat' : ev.eps_reported < ev.eps_estimate ? 'miss' : 'inline';
+  const summarize = rows => {
+    const events = rows.flatMap(row => row.past || []).filter(ev => outcome(ev));
+    const avg = key => { const values=events.map(ev=>ev[key]).filter(v=>v!=null); return values.length ? values.reduce((a,b)=>a+b,0)/values.length : null; };
+    return {names:rows.length, n:events.length, beat:events.length ? 100*events.filter(ev=>outcome(ev)==='beat').length/events.length:null, before:avg('move_before'), day:avg('move_day'), after:avg('move_after')};
+  };
+  const sectorRows = earnings.filter(row => company.sector && row.sector === company.sector);
+  const industryRows = earnings.filter(row => company.industry && row.industry === company.industry);
+  return {sector:summarize(sectorRows), industry:summarize(industryRows)};
+}
+
+async function loadTape(company) {
+  const seq = ++tapeSeq;
+  const period = $('#companyPeriod').value;
+  const key = `${company.ticker}:${period}`;
+  try {
+    if (!tapeCache[key]) {
+      const response = await fetch(`/api/tape/${encodeURIComponent(company.ticker)}?period=${period}`);
+      tapeCache[key] = await response.json();
+    }
+    if (seq !== tapeSeq || $('#companyTicker').value !== company.ticker) return;
+    renderTape(tapeCache[key], company);
+  } catch (error) {
+    if (seq === tapeSeq) $('#tapeView').innerHTML = '<div class="empty">Price tape is temporarily unavailable.</div>';
+  }
+}
+
+function renderTape(data, company) {
+  if (data.error || !data.series?.[data.ticker]) { $('#tapeView').innerHTML = '<div class="empty">No price tape available.</div>'; return; }
+  const stockDates = Object.keys(data.series[data.ticker]).sort();
+  if (stockDates.length < 2) return;
+  const W=1100,H=285,L=45,R=18,T=18,B=28,iw=W-L-R,ih=H-T-B;
+  const first=stockDates[0], last=stockDates.at(-1), firstMs=Date.parse(first), span=Math.max(1,Date.parse(last)-firstMs);
+  const allValues = Object.values(data.series).flatMap(s => Object.entries(s).filter(([d])=>d>=first&&d<=last).map(([,v])=>v));
+  const min=Math.min(...allValues), max=Math.max(...allValues), pad=Math.max(2,(max-min)*.08), lo=min-pad, hi=max+pad;
+  const x=d => L+(Date.parse(d)-firstMs)/span*iw, y=v => T+(hi-v)/(hi-lo)*ih;
+  const colors={[data.ticker]:'#e6e8ee',XLB:'#5dd39e',XLI:'#ffd166',SPY:'#6ea8fe'};
+  const paths = Object.entries(data.series).map(([ticker,s]) => {
+    const pts=Object.entries(s).filter(([d])=>d>=first&&d<=last);
+    const d=pts.map(([day,v],i)=>`${i?'L':'M'}${x(day).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    return `<path class="tape-line ${ticker===data.ticker?'stock':''}" stroke="${colors[ticker]}" d="${d}"/>`;
+  }).join('');
+  const ticks=[lo,(lo+hi)/2,hi].map(v=>`<line class="tape-axis" x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}"/><text class="chart-label" x="${L-6}" y="${y(v)+3}" text-anchor="end">${v.toFixed(0)}</text>`).join('');
+  const events=(data.events||[]).filter(ev=>ev.date?.slice(0,10)>=first&&ev.date.slice(0,10)<=last).map(ev=>{
+    const d=ev.date.slice(0,10), ex=x(d), stockVal=data.series[data.ticker][d];
+    const dot=stockVal==null?'':`<circle cx="${ex}" cy="${y(stockVal)}" r="4" fill="${ev.move_day>=0?'#5dd39e':'#ff6b6b'}"><title>${ev.fiscal_period||d} · D0 ${fmtPct(ev.move_day)}</title></circle>`;
+    return `<rect class="tape-band" x="${ex-5}" y="${T}" width="10" height="${ih}"/><line class="tape-event" x1="${ex}" y1="${T}" x2="${ex}" y2="${T+ih}"/>${dot}`;
+  }).join('');
+  const endValue=ticker=>{const vals=Object.entries(data.series[ticker]||{}).filter(([d])=>d>=first&&d<=last);return vals.length?vals.at(-1)[1]:null};
+  const stockReturn=endValue(data.ticker)-100;
+  const relative=ticker=>endValue(ticker)==null?null:stockReturn-(endValue(ticker)-100);
+  $('#tapeView').innerHTML=`<div class="tape-title"><strong>${esc(data.ticker)} tape</strong><span class="muted">Indexed to 100 · earnings windows shaded</span></div><svg class="tape-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${ticks}${events}${paths}</svg><div class="tape-legend">${Object.entries(colors).map(([k,c])=>`<span class="chart-key"><i style="background:${c}"></i>${k}</span>`).join('')}</div><div class="tape-stat-grid"><div class="tape-stat"><div class="k">Absolute return</div><div class="v ${moveClass(stockReturn)}">${fmtPct(stockReturn)}</div></div>${['XLB','XLI','SPY'].map(t=>`<div class="tape-stat"><div class="k">Versus ${t}</div><div class="v ${moveClass(relative(t))}">${fmtPct(relative(t))}</div></div>`).join('')}</div>`;
+  const groups=groupTapeStats(company);
+  const groupCard=(label,name,s)=>`<div class="metric-card"><div class="label">${label} · ${esc(name||'Unclassified')}</div><div class="value">${s.beat==null?'—':s.beat.toFixed(0)+'%'}</div><div class="compare">EPS beat rate · ${s.n} reports across ${s.names} names</div><div class="period-moves"><span class="move"><span class="lbl">D-1</span> <span class="${moveClass(s.before)}">${fmtPct(s.before)}</span></span><span class="move"><span class="lbl">D0</span> <span class="${moveClass(s.day)}">${fmtPct(s.day)}</span></span><span class="move"><span class="lbl">D+1</span> <span class="${moveClass(s.after)}">${fmtPct(s.after)}</span></span></div></div>`;
+  $('#peerStats').innerHTML=`<h3 class="analytics-section">Peer tape</h3><div class="metric-grid">${groupCard('Sector',company.sector,groups.sector)}${groupCard('Subsector',company.industry,groups.industry)}</div>`;
+}
+
+function renderCalendar() {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  $('#calTitle').textContent = viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  const byDay = {};
+  const economicByDay = {};
+  const nowMs = Date.now();
+  earnings.forEach(e => {
+    const seenEvents = new Set();
+    [...(e.upcoming || []), ...(e.past || [])].forEach(ev => {
+      const d = new Date(ev.date);
+      if (Number.isNaN(d.getTime())) return;
+      const eventKey = `${e.ticker}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (seenEvents.has(eventKey)) return;
+      seenEvents.add(eventKey);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      (byDay[key] ||= []).push({
+        ticker: e.ticker, name: e.name, event: ev, isPast: d.getTime() < nowMs,
+      });
+    });
+  });
+  (showEconomicOnCalendar ? economicEvents : []).forEach(event => {
+    const d = new Date(event.date);
+    if (Number.isNaN(d.getTime())) return;
+    (economicByDay[calKey(d)] ||= []).push(event);
+  });
+
+  const first = new Date(year, month, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const totalCells = startDow + daysInMonth;
+  const trailing = (7 - (totalCells % 7)) % 7;
+  ensureBenchmarkRange(new Date(year, month, 1 - startDow), new Date(year, month, daysInMonth + trailing));
+  ensureEconomicRange(new Date(year, month, 1 - startDow), new Date(year, month, daysInMonth + trailing));
+
+  const cells = [];
+  const heads = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  heads.forEach(h => cells.push(`<div class="cal-head">${h}</div>`));
+
+  const renderPills = (events, key) => events.map((entry, i) => {
+    const ev = entry.event;
+    const sessionClass = ['BMO', 'AMC', 'DMH'].includes(ev.session) ? ev.session : '';
+    const tip = [`${entry.ticker}${entry.name ? ' — ' + entry.name : ''}`];
+    if (ev.session) tip.push(ev.session);
+    if (ev.eps_estimate != null) tip.push(`EPS est ${ev.eps_estimate.toFixed(2)}`);
+    if (ev.eps_reported != null) tip.push(`EPS rep ${ev.eps_reported.toFixed(2)}`);
+    return `<div class="pill ${sessionClass} ${entry.isPast ? 'past' : ''}" data-key="${key}" data-idx="${i}" title="${tip.join(' · ')}">${entry.ticker}</div>`;
+  }).join('');
+
+  const sortDay = (events) => events.slice().sort((a, b) => {
+    const c = (a.event.date || '').localeCompare(b.event.date || '');
+    return c !== 0 ? c : a.ticker.localeCompare(b.ticker);
+  });
+  const renderEconomic = (key) => (economicByDay[key] || []).slice().sort((a, b) => {
+    const timeOrder = new Date(a.date) - new Date(b.date);
+    return timeOrder || (a.title || '').localeCompare(b.title || '');
+  }).map(event => {
+    const time = new Date(event.date).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+    const officialTime = event.source_timezone
+      ? new Date(event.date).toLocaleString(undefined, {
+          month:'short', day:'numeric', hour:'numeric', minute:'2-digit',
+          timeZone:event.source_timezone, timeZoneName:'short'
+        })
+      : '';
+    const countryCode = ({
+      'United States': 'US',
+      'United Kingdom': 'UK',
+      'Euro area / European Union': 'EA/EU',
+      'European Union': 'EU',
+      'China': 'CN',
+      'Brazil': 'BR',
+      'Japan': 'JP',
+      'India': 'IN',
+      'Canada': 'CA',
+    })[event.country] || (event.country || 'ECON').slice(0, 3).toUpperCase();
+    const timing = officialTime ? `${time} local / ${officialTime} official` : time;
+    return `<div class="econ-pill" title="${esc(event.country || 'Other')} · ${esc(event.source)} · ${esc(timing)} · ${esc(event.title)}">${esc(countryCode)} · ${esc(event.title)}</div>`;
+  }).join('');
+  const cellTop = (d, isoKey) => `<div class="cal-cell-top"><div class="cal-date">${d}</div>${renderBenchmark(isoKey)}</div>`;
+
+  // previous month padding
+  const prevLast = new Date(year, month, 0).getDate();
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevYear = month === 0 ? year - 1 : year;
+  for (let i = startDow - 1; i >= 0; i--) {
+    const d = prevLast - i;
+    const dayDate = new Date(prevYear, prevMonth, d);
+    const key = calKey(dayDate);
+    const events = sortDay(byDay[key] || []);
+    byDay[key] = events;
+    cells.push(`<div class="cal-cell other" data-key="${key}">${cellTop(d, isoDay(dayDate))}${renderEconomic(key)}${renderPills(events, key)}</div>`);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayDate = new Date(year, month, d);
+    const key = calKey(dayDate);
+    const events = sortDay(byDay[key] || []);
+    byDay[key] = events;
+    const isToday = key === todayKey;
+    cells.push(`<div class="cal-cell ${isToday ? 'today' : ''}" data-key="${key}">${cellTop(d, isoDay(dayDate))}${renderEconomic(key)}${renderPills(events, key)}</div>`);
+  }
+  const nextMonth = month === 11 ? 0 : month + 1;
+  const nextYear = month === 11 ? year + 1 : year;
+  for (let i = 1; i <= trailing; i++) {
+    const dayDate = new Date(nextYear, nextMonth, i);
+    const key = calKey(dayDate);
+    const events = sortDay(byDay[key] || []);
+    byDay[key] = events;
+    cells.push(`<div class="cal-cell other" data-key="${key}">${cellTop(i, isoDay(dayDate))}${renderEconomic(key)}${renderPills(events, key)}</div>`);
+  }
+  $('#calGrid').innerHTML = cells.join('');
+
+  // store latest byDay for popover access
+  window.__byDay = byDay;
+  $('#calGrid').querySelectorAll('.pill').forEach(p => {
+    p.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = p.dataset.key, idx = +p.dataset.idx;
+      const entry = (window.__byDay[key] || [])[idx];
+      if (entry) showPopover(entry, p);
+    });
+  });
+  $('#calGrid').querySelectorAll('.cal-cell').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.classList.contains('pill')) return;
+      e.stopPropagation();
+      const key = el.dataset.key;
+      const events = window.__byDay[key] || [];
+      if (key && events.length) showDayPopover(key, events, el);
+    });
+  });
+}
+
+async function loadEconomicDashboard(force = false) {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const end = new Date(today.getFullYear(), today.getMonth() + 4, today.getDate());
+  $('#econStatus').textContent = 'Loading official release calendars…';
+  const rangeKey = `${isoDay(start)}:${isoDay(end)}`;
+  if (force || economicDashboardRangeKey !== rangeKey || !economicDashboardPayload) {
+    const response = await fetch(`/api/economic-releases?start=${isoDay(start)}&end=${isoDay(end)}${force ? '&refresh=1' : ''}`);
+    economicDashboardPayload = await response.json();
+    economicDashboardRangeKey = rangeKey;
+  }
+  const payload = economicDashboardPayload;
+  const events = payload.events || [];
+  const selected = $('#econCountry').value;
+  const countries = [...new Set(events.map(event => event.country || 'Other'))].sort();
+  $('#econCountry').innerHTML = '<option value="">All regions</option>' +
+    countries.map(country => `<option value="${esc(country)}">${esc(country)}</option>`).join('');
+  $('#econCountry').value = selected;
+  const visible = events
+    .filter(event => !selected || event.country === selected)
+    .sort((a, b) => (new Date(a.date) - new Date(b.date)) || (a.title || '').localeCompare(b.title || ''));
+  const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'system timezone';
+  const rangeLabel = `${start.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}–${end.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}`;
+  $('#econStatus').textContent = `${rangeLabel} · ${visible.length} upcoming releases · ${payload.sources?.length || 0} official sources · Times in ${displayTimeZone}`;
+  $('#econList').innerHTML = visible.map(event => {
+    const dt = new Date(event.date);
+    const officialTiming = event.source_timezone ? `<div class="econ-official-time">Official date: ${esc(dt.toLocaleDateString(undefined, {
+      month:'short', day:'numeric', year:'numeric', timeZone:event.source_timezone
+    }))} · ${esc(dt.toLocaleTimeString(undefined, {
+      hour:'numeric', minute:'2-digit', timeZone:event.source_timezone, timeZoneName:'short'
+    }))} (${esc(event.country)})</div>` : '';
+    const isDirectRelease = event.source_link_type === 'release';
+    const eventTitle = isDirectRelease
+      ? `<a href="${esc(event.source_url)}" target="_blank" rel="noopener"><b>${esc(event.title)}</b></a>`
+      : `<b>${esc(event.title)}</b>`;
+    const sourceLink = event.source_url
+      ? `<a href="${esc(event.source_url)}" target="_blank" rel="noopener">${isDirectRelease ? 'Official release' : 'Official source calendar'}</a>`
+      : esc(event.source);
+    return `<article class="econ-row">
+      <div><b>${esc(dt.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}))}</b><br>
+        <span class="muted">${esc(dt.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit', timeZoneName:'short'}))} · Your time</span>${officialTiming}</div>
+      <div class="econ-country">${esc(event.country || 'Other')}</div>
+      <div>${eventTitle}${event.period ? `<div class="muted">${esc(event.period)}</div>` : ''}
+        <div class="econ-source">${esc(event.source)} · ${sourceLink}</div></div>
+      <div>${event.actual != null ? `<b>Actual ${esc(event.actual)} ${esc(event.unit || '')}</b>` :
+        `<span class="muted">${dt < new Date() ? 'Released · source linked' : 'Scheduled'}</span>`}</div>
+    </article>`;
+  }).join('') || '<div class="empty">No releases in this range.</div>';
+}
+
+function closePopover() {
+  document.querySelectorAll('.pop, .pop-backdrop').forEach(el => el.remove());
+}
+
+function eventIdFor(ticker, iso) {
+  const d = new Date(iso), quarter = Math.floor(d.getMonth() / 3) + 1;
+  return `${ticker}:${d.getFullYear()}:Q${quarter}`;
+}
+
+async function showForecastModal(ticker, name, ev) {
+  closePopover();
+  const eventId = ev.fiscal_period
+    ? `${ticker}:${ev.fiscal_period.toUpperCase().replace(/\s+/g, '').replace('Q', ':Q')}`
+    : eventIdFor(ticker, ev.date);
+  const response = await fetch(`/api/forecasts?event_id=${encodeURIComponent(eventId)}`);
+  const payload = await response.json();
+  const history = payload.records || [];
+  const latest = history.length ? history[history.length - 1].data : {};
+  const modal = document.createElement('div');
+  modal.className = 'pop forecast-modal';
+  modal.innerHTML = `
+    <button class="close" aria-label="Close">✕</button>
+    <h3>${esc(ticker)} forecast</h3>
+    <div class="sub">${esc(name)} · ${esc(fmt(ev.date))} · ${esc(ev.fiscal_period || 'Fiscal period unavailable')} · Event ${esc(eventId)}</div>
+    <div class="forecast-grid">
+      <label>Beat / miss call<select id="fCall"><option value="beat">Beat</option><option value="miss">Miss</option><option value="inline">In line</option></select></label>
+      <label>Confidence (0–100)<input id="fConfidence" type="number" min="0" max="100" step="1"></label>
+      <label>Your EPS estimate<input id="fEps" type="number" step="any"></label>
+      <label>Your revenue estimate ($)<input id="fRevenue" type="number" step="any"></label>
+      <label>Paper position<select id="fSide"><option value="none">None</option><option value="long">Long</option><option value="short">Short</option></select></label>
+      <label>Paper size ($)<input id="fSize" type="number" min="0" step="any"></label>
+    </div>
+    <label class="forecast-notes">Thesis / notes<textarea id="fNotes"></textarea></label>
+    <div class="controls"><button class="primary" id="saveForecast">${history.length ? 'Save new revision' : 'Submit forecast'}</button><span class="muted" id="forecastStatus"></span></div>
+    <div class="audit-list"><b>Immutable audit history (${history.length})</b>${history.slice().reverse().map(r => `
+      <div class="audit-item"><b>Revision ${r.revision}</b> · ${esc(new Date(r.original_recorded_at || r.recorded_at).toLocaleString())}${r.original_recorded_at ? ' · audited period-label correction' : ''}<br>
+      ${esc(r.data.call)} · confidence ${esc(r.data.confidence ?? '—')} · ${esc(r.data.paper_side)} ${esc(r.data.paper_size ?? '')}
+      <div class="hash">${esc(r.hash)}</div></div>`).join('') || '<div class="muted">No forecast submitted yet.</div>'}</div>`;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'pop-backdrop';
+  document.body.append(backdrop, modal);
+  modal.querySelector('#fCall').value = latest.call || 'beat';
+  modal.querySelector('#fConfidence').value = latest.confidence ?? '';
+  modal.querySelector('#fEps').value = latest.eps_estimate ?? '';
+  modal.querySelector('#fRevenue').value = latest.revenue_estimate ?? '';
+  modal.querySelector('#fSide').value = latest.paper_side || 'none';
+  modal.querySelector('#fSize').value = latest.paper_size ?? '';
+  modal.querySelector('#fNotes').value = latest.notes || '';
+  modal.querySelector('.close').addEventListener('click', closePopover);
+  backdrop.addEventListener('click', closePopover);
+  modal.querySelector('#saveForecast').addEventListener('click', async () => {
+    const body = {
+      ticker, event_date: ev.date, fiscal_period: ev.fiscal_period, call: modal.querySelector('#fCall').value,
+      confidence: modal.querySelector('#fConfidence').value,
+      eps_estimate: modal.querySelector('#fEps').value,
+      revenue_estimate: modal.querySelector('#fRevenue').value,
+      paper_side: modal.querySelector('#fSide').value,
+      paper_size: modal.querySelector('#fSize').value,
+      notes: modal.querySelector('#fNotes').value,
+      consensus_snapshot: {eps_estimate: ev.eps_estimate, revenue_estimate: ev.revenue_estimate, session: ev.session, captured_event_date: ev.date}
+    };
+    const status = modal.querySelector('#forecastStatus');
+    status.textContent = 'Saving immutable revision…';
+    const saved = await fetch('/api/forecasts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const result = await saved.json();
+    if (!saved.ok) { status.textContent = result.error || 'Save failed'; return; }
+    await showForecastModal(ticker, name, ev);
+    loadTracker();
+  });
+}
+
+async function loadTracker() {
+  const response = await fetch('/api/forecasts');
+  const payload = await response.json();
+  const records = payload.records || [];
+  $('#auditStatus').textContent = payload.integrity?.valid
+    ? `Audit chain verified · ${payload.integrity.records} immutable revision(s)` : 'Audit chain integrity failure';
+  $('#trackerList').innerHTML = records.map(r => `<div class="tracker-card">
+    <b>${esc(r.ticker)}</b> · ${esc(r.event_id)} · revision ${r.revision}
+    <div>${esc(r.data.call)} · confidence ${esc(r.data.confidence ?? '—')} · ${esc(r.data.paper_side)} ${esc(r.data.paper_size ?? '')}</div>
+    <div class="muted">Submitted ${esc(new Date(r.recorded_at).toLocaleString())}</div>
+  </div>`).join('') || '<div class="empty">No forecasts yet. Use Forecast beside an upcoming event.</div>';
+}
+
+function quarterForDate(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()} Q${Math.floor(d.getMonth() / 3) + 1}`;
+}
+
+async function loadNotes() {
+  const response = await fetch('/api/notes');
+  const payload = await response.json();
+  const records = payload.records || [];
+  const tickerFilter = $('#notesTicker').value;
+  const quarterFilter = $('#notesQuarter').value;
+  const tickers = [...new Set(records.map(r => r.data.ticker))].sort();
+  const quarters = [...new Set(records.map(r => r.data.calendar_quarter))].sort().reverse();
+  $('#notesTicker').innerHTML = '<option value="">All companies</option>' +
+    tickers.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  $('#notesQuarter').innerHTML = '<option value="">All calendar quarters</option>' +
+    quarters.map(q => `<option value="${esc(q)}">${esc(q)}</option>`).join('');
+  $('#notesTicker').value = tickerFilter;
+  $('#notesQuarter').value = quarterFilter;
+  const filtered = records.filter(r =>
+    (!tickerFilter || r.data.ticker === tickerFilter) &&
+    (!quarterFilter || r.data.calendar_quarter === quarterFilter)
+  );
+  $('#notesAuditStatus').textContent = payload.integrity?.valid
+    ? `Audit verified · ${payload.integrity.records} revision(s)` : 'Notes audit integrity failure';
+  $('#notesList').innerHTML = filtered.map(r => `<article class="note-card">
+    <div class="note-meta"><b>${esc(r.data.ticker)}</b> · ${esc(r.data.fiscal_period || r.data.calendar_quarter)} · revision ${r.revision}</div>
+    <h3>${esc(r.data.title)}</h3>
+    <div class="body">${esc(r.data.body)}</div>
+    <div class="note-tags">${(r.data.tags || []).map(tag => `#${esc(tag)}`).join(' ')}</div>
+    <div class="controls" style="margin:10px 0 0"><button class="edit-note" data-id="${esc(r.note_id)}">Add revision</button>
+      <span class="muted">${esc(new Date(r.recorded_at).toLocaleString())}</span></div>
+  </article>`).join('') || '<div class="empty">No notes match this view.</div>';
+  $('#notesList').querySelectorAll('.edit-note').forEach(button => {
+    const record = records.find(r => r.note_id === button.dataset.id);
+    button.addEventListener('click', () => showNoteEditor(record));
+  });
+}
+
+function showNoteEditor(existing = null, context = null) {
+  closePopover();
+  const data = existing?.data || {};
+  const defaultTicker = context?.ticker || data.ticker || earnings[0]?.ticker || '';
+  const defaultEvent = context?.event || {};
+  const options = earnings.map(e => `<option value="${esc(e.ticker)}">${esc(e.ticker)} · ${esc(e.name || '')}</option>`).join('');
+  const modal = document.createElement('div');
+  modal.className = 'pop note-modal';
+  modal.innerHTML = `
+    <button class="close" aria-label="Close">✕</button>
+    <h3>${existing ? 'Add note revision' : 'New earnings note'}</h3>
+    <div class="sub">Every save is timestamped and appended to the notes audit chain.</div>
+    <div class="forecast-grid">
+      <label>Company<select id="nTicker">${options}</select></label>
+      <label>Earnings date<input id="nDate" type="date"></label>
+      <label>Fiscal period<input id="nFiscal" placeholder="FY2026 Q2"></label>
+      <label>Tags<input id="nTags" placeholder="pricing, guidance, margins"></label>
+    </div>
+    <label class="forecast-notes">Title<input id="nTitle" maxlength="300"></label>
+    <label class="forecast-notes">Note<textarea id="nBody" style="min-height:180px"></textarea></label>
+    <div class="controls"><button class="primary" id="saveNote">${existing ? 'Save new revision' : 'Save note'}</button>
+      <span id="noteStatus" class="muted"></span></div>`;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'pop-backdrop';
+  document.body.append(backdrop, modal);
+  modal.querySelector('#nTicker').value = defaultTicker;
+  modal.querySelector('#nDate').value = (defaultEvent.date || data.event_date || new Date().toISOString()).slice(0, 10);
+  modal.querySelector('#nFiscal').value = defaultEvent.fiscal_period || data.fiscal_period || '';
+  modal.querySelector('#nTitle').value = data.title || '';
+  modal.querySelector('#nBody').value = data.body || '';
+  modal.querySelector('#nTags').value = (data.tags || []).join(', ');
+  modal.querySelector('.close').addEventListener('click', closePopover);
+  backdrop.addEventListener('click', closePopover);
+  modal.querySelector('#saveNote').addEventListener('click', async () => {
+    const body = {
+      note_id: existing?.note_id,
+      ticker: modal.querySelector('#nTicker').value,
+      event_date: `${modal.querySelector('#nDate').value}T12:00:00-04:00`,
+      fiscal_period: modal.querySelector('#nFiscal').value,
+      title: modal.querySelector('#nTitle').value,
+      body: modal.querySelector('#nBody').value,
+      tags: modal.querySelector('#nTags').value.split(',').map(x => x.trim()).filter(Boolean),
+    };
+    const status = modal.querySelector('#noteStatus');
+    status.textContent = 'Saving immutable revision…';
+    const response = await fetch('/api/notes', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const result = await response.json();
+    if (!response.ok) { status.textContent = result.error || 'Save failed'; return; }
+    closePopover();
+    loadNotes();
+  });
+}
+
+function showDayPopover(key, events, anchorEl) {
+  closePopover();
+  const [year, month, day] = key.split('-').map(Number);
+  const title = new Date(year, month, day).toLocaleDateString(undefined, {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  });
+  const eventRows = events.map(entry => {
+    const ev = entry.event;
+    const dt = new Date(ev.date);
+    const when = dt.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+    const sess = ev.session ? `<span class="session ${ev.session}">${ev.session}</span>` : '';
+    const eps = ev.eps_estimate != null ? `EPS est ${ev.eps_estimate.toFixed(2)}` :
+      ev.eps_reported != null ? `EPS rep ${ev.eps_reported.toFixed(2)}` : '';
+    return `
+      <div class="day-item" title="${entry.name || ''}">
+        <div class="when">${when}</div>
+        <div class="company">
+          <div class="ticker">${entry.ticker}${sess}</div>
+          <div class="name">${entry.name || ''}</div>
+        </div>
+        <div class="muted">${eps}</div>
+      </div>
+    `;
+  }).join('');
+
+  const pop = document.createElement('div');
+  pop.className = 'pop day-pop';
+  pop.innerHTML = `
+    <button class="close" aria-label="Close">✕</button>
+    <h3>${title}</h3>
+    <div class="sub">${events.length} event${events.length === 1 ? '' : 's'}</div>
+    <div class="day-list">${eventRows}</div>
+  `;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'pop-backdrop';
+  document.body.appendChild(backdrop);
+  document.body.appendChild(pop);
+
+  const r = anchorEl.getBoundingClientRect();
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let left = r.left;
+  let top = r.bottom + 6;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
+  if (top < 8) top = 8;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+
+  pop.querySelector('.close').addEventListener('click', closePopover);
+  backdrop.addEventListener('click', closePopover);
+  document.addEventListener('keydown', escClose);
+}
+
+function showPopover(entry, anchorEl) {
+  closePopover();
+  const ev = entry.event;
+  const fmtRev = (v) => v == null ? '—' : (Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(2)}B` : `$${(v/1e6).toFixed(0)}M`);
+  const fmtEps = (v) => v == null ? '—' : v.toFixed(2);
+  const dt = new Date(ev.date);
+  const when = dt.toLocaleString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+  const sess = ev.session ? `<span class="session ${ev.session}">${ev.session}</span>` : '';
+  const returnStack = () => {
+    const rows = [
+      ['D-1', ev.move_before, ev.relative_move_before],
+      ['D0', ev.move_day, ev.relative_move_day],
+      ['D+1', ev.move_after, ev.relative_move_after],
+    ];
+    return `<div class="returns">
+      <div class="ret-row ret-head"><div></div><div>Absolute</div><div>Relative</div></div>
+      ${rows.map(([label, abs, rel]) => `
+        <div class="ret-row">
+          <div class="ret-label">${label}</div>
+          <div class="ret-box"><span>Stock</span><b class="${moveClass(abs)}">${fmtPct(abs)}</b></div>
+          <div class="ret-box"><span>vs XLB</span><b class="${moveClass(rel)}">${fmtPct(rel)}</b></div>
+        </div>
+      `).join('')}
+    </div>`;
+  };
+
+  const rows = [];
+  if (entry.isPast) {
+    const cls = (ev.eps_estimate != null && ev.eps_reported != null) ? (ev.eps_reported >= ev.eps_estimate ? 'beat' : 'miss') : '';
+    rows.push(`<dt>EPS estimate</dt><dd>${fmtEps(ev.eps_estimate)}</dd>`);
+    rows.push(`<dt>EPS reported</dt><dd class="${cls}">${fmtEps(ev.eps_reported)}</dd>`);
+    if (ev.eps_surprise_pct != null)
+      rows.push(`<dt>Surprise</dt><dd class="${cls}">${ev.eps_surprise_pct > 0 ? '+' : ''}${ev.eps_surprise_pct.toFixed(1)}%</dd>`);
+    const revCls = (ev.revenue_estimate != null && ev.revenue_reported != null)
+      ? (ev.revenue_reported >= ev.revenue_estimate ? 'beat' : 'miss') : '';
+    rows.push(`<dt>Revenue estimate</dt><dd>${fmtRev(ev.revenue_estimate)}</dd>`);
+    rows.push(`<dt>Revenue reported</dt><dd class="${revCls}">${fmtRev(ev.revenue_reported)}</dd>`);
+    if (ev.revenue_source)
+      rows.push(`<dt>Revenue source</dt><dd>${esc(ev.revenue_source)}</dd>`);
+    if (ev.revenue_surprise_pct != null)
+      rows.push(`<dt>Rev surprise</dt><dd class="${revCls}">${ev.revenue_surprise_pct > 0 ? '+' : ''}${ev.revenue_surprise_pct.toFixed(1)}%</dd>`);
+    if (ev.reaction_date) {
+      const reaction = new Date(`${ev.reaction_date}T12:00:00`).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+      rows.push(`<dt>Reaction day</dt><dd>${reaction}</dd>`);
+    }
+    rows.push(`<dt>Returns</dt><dd>${returnStack()}</dd>`);
+  } else {
+    rows.push(`<dt>EPS estimate</dt><dd>${fmtEps(ev.eps_estimate)}</dd>`);
+    rows.push(`<dt>Revenue estimate</dt><dd>${fmtRev(ev.revenue_estimate)}</dd>`);
+    const days = Math.round((dt - new Date()) / 86400000);
+    rows.push(`<dt>Countdown</dt><dd>${days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days > 0 ? `in ${days} days` : `${-days}d ago`}</dd>`);
+  }
+
+  const pop = document.createElement('div');
+  pop.className = 'pop';
+  pop.innerHTML = `
+    <button class="close" aria-label="Close">✕</button>
+    <h3>${entry.ticker} ${sess}</h3>
+    <div class="sub">${entry.name || ''}</div>
+    <div class="sub" style="margin-bottom: 12px;">${when}</div>
+    <dl>${rows.join('')}</dl>
+  `;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'pop-backdrop';
+  document.body.appendChild(backdrop);
+  document.body.appendChild(pop);
+
+  // position near anchor, clamped to viewport
+  const r = anchorEl.getBoundingClientRect();
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let left = r.left;
+  let top = r.bottom + 6;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
+  if (top < 8) top = 8;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+
+  pop.querySelector('.close').addEventListener('click', closePopover);
+  if (!entry.isPast) {
+    const button = document.createElement('button');
+    button.className = 'primary';
+    button.textContent = 'Create forecast';
+    button.style.marginTop = '12px';
+    button.addEventListener('click', () => showForecastModal(entry.ticker, entry.name, ev));
+    pop.appendChild(button);
+  }
+  const noteButton = document.createElement('button');
+  noteButton.textContent = 'Add note';
+  noteButton.style.margin = '12px 0 0 8px';
+  noteButton.addEventListener('click', () => showNoteEditor(null, {ticker: entry.ticker, event: ev}));
+  pop.appendChild(noteButton);
+  backdrop.addEventListener('click', closePopover);
+  document.addEventListener('keydown', escClose);
+}
+function escClose(e) { if (e.key === 'Escape') { closePopover(); document.removeEventListener('keydown', escClose); } }
+
+async function loadTickerList() {
+  const r = await fetch('/api/tickers');
+  const t = await r.json();
+  $('#tickerList').value = t.join('\n');
+}
+
+$('#refresh').addEventListener('click', () => loadEarnings(true));
+$('#prevMonth').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() - 1); renderCalendar(); });
+$('#nextMonth').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() + 1); renderCalendar(); });
+$('#todayBtn').addEventListener('click', () => { viewDate = new Date(); viewDate.setDate(1); renderCalendar(); });
+$('#reloadTracker').addEventListener('click', loadTracker);
+$('#reloadEconomic').addEventListener('click', () => loadEconomicDashboard(true));
+$('#econCountry').addEventListener('change', loadEconomicDashboard);
+$('#showEconomic').checked = showEconomicOnCalendar;
+$('#showEconomic').addEventListener('change', event => {
+  showEconomicOnCalendar = event.target.checked;
+  localStorage.setItem('showEconomicOnCalendar', String(showEconomicOnCalendar));
+  renderCalendar();
+});
+$('#newNote').addEventListener('click', () => showNoteEditor());
+$('#notesTicker').addEventListener('change', loadNotes);
+$('#notesQuarter').addEventListener('change', loadNotes);
+$('#analyticsQuarter').addEventListener('change', loadAnalytics);
+$('#companyTicker').addEventListener('change', renderCompany);
+$('#companyPeriod').addEventListener('change', renderCompany);
+
+$('#saveTickers').addEventListener('click', async () => {
+  const tickers = $('#tickerList').value.split(/[\s,]+/).filter(Boolean);
+  $('#saveStatus').textContent = 'Saving…';
+  await fetch('/api/tickers', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({tickers})
+  });
+  $('#saveStatus').textContent = 'Saved. Refreshing…';
+  await loadTickerList();
+  await loadEarnings(true);
+  $('#saveStatus').textContent = 'Saved.';
+});
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const v = t.dataset.view;
+    $('#view-next').classList.toggle('hidden', v !== 'next');
+    $('#view-cal').classList.toggle('hidden', v !== 'cal');
+    $('#view-econ').classList.toggle('hidden', v !== 'econ');
+    $('#view-analytics').classList.toggle('hidden', v !== 'analytics');
+    $('#view-company').classList.toggle('hidden', v !== 'company');
+    $('#view-tracker').classList.toggle('hidden', v !== 'tracker');
+    $('#view-notes').classList.toggle('hidden', v !== 'notes');
+    $('#view-settings').classList.toggle('hidden', v !== 'settings');
+    if (v === 'tracker') loadTracker();
+    if (v === 'econ') loadEconomicDashboard();
+    if (v === 'notes') loadNotes();
+    if (v === 'analytics') loadAnalytics();
+    if (v === 'company') renderCompany();
+  });
+});
+
+loadTickerList();
+loadEarnings();
+</script>
+</body>
+</html>

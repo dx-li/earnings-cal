@@ -1,0 +1,3 @@
+[console_scripts]
+earnings-cal = earnings_cal.desktop:main
+earnings-call-analysis = earnings_cal.call_analysis:main

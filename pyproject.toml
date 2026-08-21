@@ -1,0 +1,35 @@
+[project]
+name = "earnings-cal"
+version = "0.1.0"
+description = "Earnings calendar for watched tickers"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "flask>=3.0",
+    "requests>=2.32",
+    "yfinance>=0.2.50",
+    "lxml>=5.0",
+    "curl-cffi>=0.10",
+    "pywebview>=5.0",
+    "edgartools>=5.51.0",
+    "python-dotenv>=1.2.3",
+]
+
+[project.scripts]
+earnings-cal = "earnings_cal.desktop:main"
+earnings-call-analysis = "earnings_cal.call_analysis:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+earnings_cal = ["assets/*"]
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.0",
+    "pillow>=10.0",
+]

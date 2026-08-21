@@ -284,7 +284,7 @@
   </section>
   <section id="view-analytics" class="hidden">
     <div class="analytics-head">
-      <select id="analyticsQuarter" aria-label="Earnings season"></select>
+      <select id="analyticsQuarter" aria-label="Release quarter"></select>
       <span id="analyticsStatus" class="muted"></span>
     </div>
     <div id="analyticsView"></div>
@@ -399,7 +399,7 @@ function renderAnalytics(data) {
   const currentSelection = data.current.quarter;
   select.innerHTML = data.quarters.map(q => `<option ${q === currentSelection ? 'selected' : ''}>${esc(q)}</option>`).join('');
   const c = data.current, p = data.previous;
-  $('#analyticsStatus').textContent = `${c.events} archived reports · compared with ${p ? p.quarter : 'no prior season'}`;
+  $('#analyticsStatus').textContent = `${c.events} completed reports announced in ${c.quarter} · compared with ${p ? p.quarter : 'no prior release quarter'}`;
   const pct = v => v == null ? '—' : `${v.toFixed(1)}%`;
   const delta = (now, prior, suffix=' pts') => now == null || prior == null ? 'No prior comparison' : `${now-prior >= 0 ? '+' : ''}${(now-prior).toFixed(1)}${suffix} vs ${p.quarter}`;
   const card = (label, value, comparison, cls='') => `<div class="metric-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div><div class="compare">${comparison}</div></div>`;
@@ -447,7 +447,7 @@ function renderAnalytics(data) {
       ${card('Average D0 reaction', fmtPct(c.reaction.all.average), `${c.reaction.all.n} reports · ${delta(c.reaction.all.average, prior(x=>x.reaction.all.average), '%')}`, moveClass(c.reaction.all.average))}
       ${card('Perfect EPS foresight', fmtPct(c.oracle_eps.average), `Long beats / short misses, equal-weight D0 · n=${c.oracle_eps.n}`, moveClass(c.oracle_eps.average))}
     </div>
-    <h3 class="analytics-section">Across seasons</h3>
+    <h3 class="analytics-section">Across release quarters</h3>
     ${trends}
     <h3 class="analytics-section">How the market reacted</h3>
     <table class="reaction-table"><thead><tr><th>Outcome</th><th>D-1 drift</th><th>D0 reaction</th><th>D+1 follow-through</th></tr></thead><tbody>${reactionRows}</tbody></table>
@@ -459,7 +459,7 @@ function renderAnalytics(data) {
       ${card('Next-day follow-through · misses', fmtPct(c.follow_through.eps_miss.average), `D+1 average · n=${c.follow_through.eps_miss.n}`, moveClass(c.follow_through.eps_miss.average))}
       ${card('Average XLB-relative D0', fmtPct(c.relative_reaction.average), `Stock return minus XLB · n=${c.relative_reaction.n}`, moveClass(c.relative_reaction.average))}
     </div>
-    <p class="muted">D-1 is the trading session immediately before the reaction session. D0 is the report-day close-to-close move for BMO/DMH reports and the next trading day for AMC reports. D+1 is the following session. “Perfect EPS foresight” is hypothetical and excludes inline or missing-consensus reports. Reaction charts are clipped at ±5% to keep seasons comparable; hover a point for its exact value.</p>`;
+    <p class="muted"><b>Quarter labels here are calendar quarters of the earnings announcement, not issuer fiscal quarters.</b> For example, a fiscal Q2 result announced in July belongs to release quarter Q3. Only completed reports with an actual result and a release timestamp no later than today are included. D-1 is the trading session immediately before the reaction session. D0 is the report-day close-to-close move for BMO/DMH reports and the next trading day for AMC reports. D+1 is the following session. “Perfect EPS foresight” is hypothetical and excludes inline or missing-consensus reports. Reaction charts are clipped at ±5% to keep release quarters comparable; hover a point for its exact value.</p>`;
 }
 
 function upsertEarnings(entry) {
@@ -673,31 +673,34 @@ function renderCompany() {
   if (!company) { view.innerHTML = '<div class="empty">Add a ticker to see its earnings history.</div>'; return; }
   const events = [...(company.upcoming || []).map(e=>({...e, upcoming:true})), ...(company.past || [])]
     .sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  const latestCompleted = events.find(e=>!e.upcoming && (e.eps_reported!=null || e.revenue_reported!=null));
   $('#companySummary').textContent = `${events.filter(e=>!e.upcoming).length} completed reports in the local archive`;
   const outcome = (est, rep) => est == null || rep == null ? null : rep > est ? 'beat' : rep < est ? 'miss' : 'inline';
   const number = v => v == null ? '—' : Number(v).toFixed(2);
   const surprise = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`;
-  view.innerHTML = `<div id="tapeView" class="tape-shell"><div class="muted">Loading price tape…</div></div><div id="peerStats"></div><div id="earningsBrief"><div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3><button onclick="loadEarningsBrief('${esc(company.ticker)}',true)">Research / refresh</button></div><div class="muted">Loading saved research…</div></div><h3 class="analytics-section">Earnings periods</h3><div class="period-strip">${events.map(ev => {
+  view.innerHTML = `<div id="tapeView" class="tape-shell"><div class="muted">Loading price tape…</div></div><div id="peerStats"></div><div id="earningsBrief"><div class="brief-head"><h3 class="analytics-section">Earnings drivers</h3></div><div class="muted">Select a completed quarter below.</div></div><h3 class="analytics-section">Earnings periods</h3><div class="period-strip">${events.map(ev => {
     const eps = outcome(ev.eps_estimate, ev.eps_reported), rev = outcome(ev.revenue_estimate, ev.revenue_reported);
     const state = ev.upcoming ? 'upcoming' : eps === 'beat' && rev === 'beat' ? 'double-beat' : eps === 'miss' && rev === 'miss' ? 'double-miss' : 'mixed';
     const label = ev.fiscal_period || (() => { const d=new Date(ev.date); return `${d.getFullYear()} Q${Math.floor(d.getMonth()/3)+1}`; })();
     const moves = [['D-1',ev.move_before],['D0',ev.move_day],['D+1',ev.move_after]].map(([k,v]) => `<span class="move"><span class="lbl">${k}</span> <span class="${moveClass(v)}">${fmtPct(v)}</span></span>`).join('');
-    return `<article class="period-card ${state}"><div class="period-label">${esc(label)} ${ev.upcoming ? '<span class="session">UPCOMING</span>' : ''}</div><div class="period-date">${fmt(ev.date)} · ${esc(ev.session || 'time TBD')}</div><div class="period-result"><span>EPS</span><span class="${eps||''}">${number(ev.eps_reported)} vs ${number(ev.eps_estimate)} · ${surprise(ev.eps_surprise_pct)}</span><span>Revenue</span><span class="${rev||''}">${surprise(ev.revenue_surprise_pct)} surprise</span></div>${ev.upcoming ? '' : `<div class="period-moves">${moves}</div>`}</article>`;
+    const canBrief=!ev.upcoming && (ev.eps_reported!=null || ev.revenue_reported!=null) && ev.fiscal_period;
+    return `<article class="period-card ${state}"><div class="period-label">${esc(label)} ${ev.upcoming ? '<span class="session">UPCOMING</span>' : ''}</div><div class="period-date">Released ${fmt(ev.date)} · ${esc(ev.session || 'time TBD')}</div><div class="period-result"><span>EPS</span><span class="${eps||''}">${number(ev.eps_reported)} vs ${number(ev.eps_estimate)} · ${surprise(ev.eps_surprise_pct)}</span><span>Revenue</span><span class="${rev||''}">${surprise(ev.revenue_surprise_pct)} surprise</span></div>${ev.upcoming ? '' : `<div class="period-moves">${moves}</div>`}${canBrief?`<button style="margin-top:10px" onclick="loadEarningsBrief('${esc(company.ticker)}',false,'${String(ev.date).slice(0,10)}','${esc(ev.fiscal_period)}')">Open earnings brief</button>`:''}</article>`;
   }).join('')}</div>`;
   loadTape(company);
-  loadEarningsBrief(company.ticker, false);
+  if(latestCompleted?.fiscal_period) loadEarningsBrief(company.ticker, false, String(latestCompleted.date).slice(0,10), latestCompleted.fiscal_period);
 }
 
-async function loadEarningsBrief(ticker, refresh) {
+async function loadEarningsBrief(ticker, refresh, releaseDate, fiscalPeriod) {
   const box=$('#earningsBrief'); if(!box) return;
   if(refresh) box.innerHTML='<div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3></div><div class="muted">Reading filings and transcript…</div>';
   try {
-    const response=await fetch(`/api/earnings/ticker/${encodeURIComponent(ticker)}/brief`,{method:refresh?'POST':'GET'});
-    if(response.status===404){box.innerHTML=`<div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3><button onclick="loadEarningsBrief('${esc(ticker)}',true)">Research latest earnings</button></div><div class="empty">No brief generated yet.</div>`;return}
+    const query=`?release_date=${encodeURIComponent(releaseDate)}&fiscal_period=${encodeURIComponent(fiscalPeriod)}`;
+    const response=await fetch(`/api/earnings/ticker/${encodeURIComponent(ticker)}/brief${query}`,{method:refresh?'POST':'GET',headers:refresh?{'Content-Type':'application/json'}:{},body:refresh?JSON.stringify({release_date:releaseDate,fiscal_period:fiscalPeriod}):undefined});
+    if(response.status===404){box.innerHTML=`<div class="brief-head"><div><h3 class="analytics-section">Earnings drivers · ${esc(fiscalPeriod)}</h3><div class="muted">Released ${esc(releaseDate)}</div></div><button onclick="loadEarningsBrief('${esc(ticker)}',true,'${esc(releaseDate)}','${esc(fiscalPeriod)}')">Generate earnings brief</button></div><div class="empty">No brief generated for this release yet.</div>`;return}
     const d=await response.json(); if(!response.ok) throw new Error(d.error||'Research failed');
     const card=(title,section)=>`<article class="brief-card"><h4>${title}</h4><p>${esc(section?.summary||'Not disclosed')}</p><ul>${(section?.drivers||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></article>`;
-    box.innerHTML=`<div class="brief-head"><div><h3 class="analytics-section">Latest earnings drivers</h3><div class="muted">${esc(d.period||'Latest report')} · generated ${fmt(d.generated_at)}</div></div><button onclick="loadEarningsBrief('${esc(ticker)}',true)">Refresh research</button></div><p><strong>${esc(d.verdict||'')}</strong></p><div class="brief-grid">${card('Top line',d.top_line)}${card('Bottom line',d.bottom_line)}${card('Cash flow & inventory',d.cash_inventory)}</div><details><summary>Sources, watch items & limitations</summary><p>${(d.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(' · ')}</p><ul>${[...(d.watch_items||[]),...(d.limitations||[]).map(x=>`Limitation: ${x}`)].map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`;
-  } catch(err) { box.innerHTML=`<div class="brief-head"><h3 class="analytics-section">Latest earnings drivers</h3><button onclick="loadEarningsBrief('${esc(ticker)}',true)">Retry</button></div><div class="empty">${esc(err.message)}</div>`; }
+    box.innerHTML=`<div class="brief-head"><div><h3 class="analytics-section">Earnings drivers · ${esc(d.fiscal_period||fiscalPeriod)}</h3><div class="muted">Released ${esc(d.release_date||releaseDate)} · generated ${fmt(d.generated_at)}</div></div><button onclick="loadEarningsBrief('${esc(ticker)}',true,'${esc(releaseDate)}','${esc(fiscalPeriod)}')">Regenerate</button></div><p><strong>${esc(d.verdict||'')}</strong></p><div class="brief-grid">${card('Top line',d.top_line)}${card('Bottom line',d.bottom_line)}${card('Cash flow & inventory',d.cash_inventory)}</div><details><summary>Sources, watch items & limitations</summary><p>${(d.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(' · ')}</p><ul>${[...(d.watch_items||[]),...(d.limitations||[]).map(x=>`Limitation: ${x}`)].map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`;
+  } catch(err) { box.innerHTML=`<div class="brief-head"><h3 class="analytics-section">Earnings drivers · ${esc(fiscalPeriod)}</h3><button onclick="loadEarningsBrief('${esc(ticker)}',true,'${esc(releaseDate)}','${esc(fiscalPeriod)}')">Retry</button></div><div class="empty">${esc(err.message)}</div>`; }
 }
 
 function groupTapeStats(company) {

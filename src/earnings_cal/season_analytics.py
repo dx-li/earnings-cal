@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from statistics import median
 
 
@@ -112,6 +112,16 @@ def summarize_seasons(companies: list[dict], selected: str | None = None) -> dic
         for raw in company.get("past", []):
             if not raw.get("date"):
                 continue
+            try:
+                released = datetime.fromisoformat(str(raw["date"]).replace("Z", "+00:00"))
+                if released.tzinfo is None:
+                    released = released.replace(tzinfo=timezone.utc)
+                if released > datetime.now(timezone.utc):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            if raw.get("eps_reported") is None and raw.get("revenue_reported") is None:
+                continue
             eps = _outcome(raw.get("eps_estimate"), raw.get("eps_reported"))
             revenue = _outcome(raw.get("revenue_estimate"), raw.get("revenue_reported"))
             combo = None
@@ -131,6 +141,8 @@ def summarize_seasons(companies: list[dict], selected: str | None = None) -> dic
     index = quarters.index(chosen)
     previous = quarters[index + 1] if index + 1 < len(quarters) else None
     return {
+        "basis": "announcement_calendar_quarter",
+        "basis_label": "Release quarter",
         "quarters": quarters,
         "current": _season(events, chosen),
         "previous": _season(events, previous) if previous else None,

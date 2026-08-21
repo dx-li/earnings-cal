@@ -6,7 +6,7 @@ import os
 import re
 import ipaddress
 import socket
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
@@ -15,7 +15,7 @@ import requests
 from edgar import Company, set_identity
 from earnings_cal.research_repository import ResearchRepository
 
-BRIEF_SHAPE = {"period":"fiscal period","verdict":"quality of print","top_line":{"summary":"","drivers":[]},"bottom_line":{"summary":"","drivers":[]},"cash_inventory":{"summary":"","drivers":[]},"watch_items":[],"sources":[{"title":"","url":"","type":"filing|transcript|web"}],"limitations":[]}
+BRIEF_SHAPE = {"release_date":"YYYY-MM-DD","fiscal_period":"issuer fiscal period","verdict":"quality of print","top_line":{"summary":"","drivers":[]},"bottom_line":{"summary":"","drivers":[]},"cash_inventory":{"summary":"","drivers":[]},"watch_items":[],"sources":[{"title":"","url":"","type":"filing|transcript|web"}],"limitations":[]}
 TOOLS = [
     {"type":"function","function":{"name":"get_recent_filings","description":"Get recent official SEC earnings filings through EdgarTools. Use this first.","parameters":{"type":"object","properties":{"forms":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer"}},"required":["forms"]}}},
     {"type":"function","function":{"name":"search_earnings_transcript","description":"Search the public web for the latest earnings transcript or prepared remarks.","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}},
@@ -38,10 +38,13 @@ class EarningsBriefHarness:
     def cached(self, ticker: str) -> dict | None:
         return self.repository.cached_brief(ticker)
 
-    def run(self, ticker: str, company_name: str | None = None) -> dict:
+    def run(self, ticker: str, company_name: str | None = None, *, release_date: str | None = None,
+            fiscal_period: str | None = None) -> dict:
         ticker = ticker.upper()
         run_id = self.repository.begin_run(ticker, self.model)
         usage = {"input_tokens":0,"output_tokens":0}
+        self.target_release_date = release_date[:10] if release_date else None
+        self.target_fiscal_period = fiscal_period
         try:
             return self._run(ticker, company_name, run_id, usage)
         except Exception as exc:
@@ -51,7 +54,7 @@ class EarningsBriefHarness:
     def _run(self, ticker: str, company_name: str | None, run_id: str, usage: dict) -> dict:
         messages = [
             {"role":"system","content":"You are a public-equity earnings analyst in a bounded research harness. Use official SEC filings first, then find the earnings transcript or prepared remarks. Never invent a number, quote, or cause. Separate reported facts from management explanations. If evidence is unavailable, say so. Return concise JSON only when research is complete."},
-            {"role":"user","content":f"Research {company_name or ticker} ({ticker})'s most recent reported earnings. Explain top-line, bottom-line, cash-flow/working-capital/inventory drivers. Use tools, then return JSON matching this exact shape: {json.dumps(BRIEF_SHAPE)}"},
+            {"role":"user","content":f"Research {company_name or ticker} ({ticker}) earnings released {self.target_release_date or 'most recently'} for {self.target_fiscal_period or 'the corresponding fiscal period'}. Explain top-line, bottom-line, cash-flow/working-capital/inventory drivers. Do not substitute a different quarter. Use tools, then return JSON matching this exact shape: {json.dumps(BRIEF_SHAPE)}"},
         ]
         trace = []
         for step in range(6):
@@ -69,6 +72,9 @@ class EarningsBriefHarness:
                     messages.append({"role":"user","content":f"Return the completed answer now as one JSON object only, matching this exact shape: {json.dumps(BRIEF_SHAPE)}"})
                     continue
                 result.update({"ticker":ticker,"generated_at":datetime.now(timezone.utc).isoformat(),"model":self.model,"usage":usage,"trace":trace})
+                if self.target_release_date: result["release_date"] = self.target_release_date
+                if self.target_fiscal_period: result["fiscal_period"] = self.target_fiscal_period
+                result["period"] = result.get("fiscal_period")
                 result["run_id"] = run_id
                 self._validate(result)
                 self.repository.save_brief(ticker, result, run_id)
@@ -88,12 +94,16 @@ class EarningsBriefHarness:
     def _tool(self, ticker: str, name: str, args: dict):
         if name == "get_recent_filings":
             forms=[f for f in args.get("forms",[]) if f in {"8-K","10-Q","10-K","6-K","20-F"}] or ["8-K","10-Q"]
-            filings=Company(ticker).get_filings(form=forms).head(min(max(int(args.get("limit",2)),1),2)); rows=[]
+            kwargs = {"form": forms}
+            if self.target_release_date:
+                target = datetime.fromisoformat(self.target_release_date).date()
+                kwargs["filing_date"] = ((target - timedelta(days=45)).isoformat(), (target + timedelta(days=15)).isoformat())
+            filings=Company(ticker).get_filings(**kwargs).head(min(max(int(args.get("limit",2)),1),2)); rows=[]
             for filing in filings:
                 rows.append({"form":filing.form,"filed":str(filing.filing_date),"accession":filing.accession_no,"url":filing.homepage_url,"text":filing.markdown()[:45000]})
             return {"source":"SEC EDGAR via EdgarTools","filings":rows}
         if name == "search_earnings_transcript":
-            query=str(args.get("query") or f"{ticker} latest earnings call transcript")
+            query=str(args.get("query") or f"{ticker} {self.target_fiscal_period or ''} {self.target_release_date or 'latest'} earnings call transcript")
             html=self.http.get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}",timeout=25).text; hits=[]
             for href,title in re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',html,re.I|re.S):
                 parsed=urlparse(unescape(href)); target=unquote(parse_qs(parsed.query).get("uddg",[href])[0])
@@ -120,6 +130,6 @@ class EarningsBriefHarness:
 
     @staticmethod
     def _validate(result: dict) -> None:
-        required={"period","verdict","top_line","bottom_line","cash_inventory","watch_items","sources","limitations"}; missing=required-result.keys()
+        required={"release_date","fiscal_period","verdict","top_line","bottom_line","cash_inventory","watch_items","sources","limitations"}; missing=required-result.keys()
         if missing: raise ValueError(f"Model response missing fields: {', '.join(sorted(missing))}")
         if not result["sources"]: raise ValueError("Model response contained no source citations")

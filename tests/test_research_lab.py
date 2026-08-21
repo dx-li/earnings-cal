@@ -17,13 +17,30 @@ class ResearchLabTests(TestCase):
         with TemporaryDirectory() as tmp:
             harness = EarningsBriefHarness(ResearchRepository(Path(tmp)), "test-key")
             with self.assertRaises(ValueError):
-                harness._validate({"period":"Q1","verdict":"","top_line":{},"bottom_line":{},"cash_inventory":{},"watch_items":[],"sources":[],"limitations":[]})
+                harness._validate({"release_date":"2026-01-01","fiscal_period":"Q1","verdict":"","top_line":{},"bottom_line":{},"cash_inventory":{},"watch_items":[],"sources":[],"limitations":[]})
 
     def test_earnings_brief_cache_round_trip(self):
         with TemporaryDirectory() as tmp:
             repository = ResearchRepository(Path(tmp))
-            repository.save_brief("ABC", {"ticker":"ABC","generated_at":"2026-01-01","period":"Q1"}, None)
+            repository.save_brief("ABC", {"ticker":"ABC","generated_at":"2026-01-01","release_date":"2026-01-01","fiscal_period":"FY2026 Q1"}, None)
             self.assertEqual(EarningsBriefHarness(repository, "test-key").cached("abc")["ticker"], "ABC")
+
+    def test_briefs_are_keyed_by_release_and_fiscal_period(self):
+        with TemporaryDirectory() as tmp:
+            repository = ResearchRepository(Path(tmp))
+            for date, period in (("2026-04-20","FY2026 Q1"),("2026-07-20","FY2026 Q2")):
+                repository.save_brief("ABC", {"ticker":"ABC","generated_at":date,"release_date":date,
+                                               "fiscal_period":period,"verdict":period}, None)
+            self.assertEqual(repository.brief_for_event("ABC","2026-04-20","FY2026 Q1")["verdict"], "FY2026 Q1")
+            self.assertEqual(len(repository.list_briefs("ABC")), 2)
+
+    def test_brief_job_queue_skips_completed_event(self):
+        with TemporaryDirectory() as tmp:
+            repository = ResearchRepository(Path(tmp))
+            self.assertTrue(repository.enqueue_brief("ABC","2026-07-20","FY2026 Q2","ABC Inc"))
+            job = repository.next_brief_job()
+            self.assertEqual(job["fiscal_period"], "FY2026 Q2")
+            repository.finish_brief_job(job)
 
     def test_research_repository_catalogs_lake_artifact(self):
         with TemporaryDirectory() as tmp:

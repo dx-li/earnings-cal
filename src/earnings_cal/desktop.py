@@ -5,7 +5,7 @@ import time
 
 import webview
 
-from earnings_cal.app import app
+from earnings_cal.app import app, start_brief_backfill
 
 
 def _find_free_port() -> int:
@@ -32,6 +32,7 @@ def main() -> None:
     port = _find_free_port()
     threading.Thread(target=_serve, args=(port,), daemon=True).start()
     _wait_for_server(port)
+    start_brief_backfill()
     webview.create_window(
         "Earnings Calendar",
         f"http://127.0.0.1:{port}/",

@@ -34,3 +34,12 @@ class SeasonAnalyticsTests(TestCase):
         }]}])
         self.assertEqual(result["current"]["eps"]["beat"]["n"], 0)
         self.assertIsNone(result["current"]["eps"]["beat"]["pct"])
+
+    def test_future_and_unreported_events_do_not_enter_release_quarter(self):
+        result = summarize_seasons([{"past": [
+            {"date":"2999-08-01T08:00:00Z","eps_reported":2,"eps_estimate":1},
+            {"date":"2026-08-01T08:00:00Z","eps_reported":None,"revenue_reported":None},
+            {"date":"2026-07-20T08:00:00Z","eps_reported":2,"eps_estimate":1},
+        ]}])
+        self.assertEqual(result["basis"], "announcement_calendar_quarter")
+        self.assertEqual(result["current"]["events"], 1)

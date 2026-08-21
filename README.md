@@ -33,6 +33,13 @@ Set `EARNINGS_DATA_ROOT` in `.env` to move the database and lake to another
 drive. Existing AppData brief JSON is copied into this store on first use; the
 legacy files are left untouched.
 
+The desktop app queues the latest completed release for every watched ticker in
+a single background research worker. Briefs are keyed by ticker, release date,
+and issuer fiscal period, so historical quarters remain independently clickable
+and regenerable. The Analytics tab groups completed reports by calendar quarter
+of the announcement and labels that basis explicitly; it does not treat the
+release quarter as the issuer's fiscal quarter.
+
 On first launch, the operational files are also copied from `%APPDATA%\earnings-cal`
 into the lake and registered in SQLite's `data_assets` catalog. The application
 then reads and writes the lake copies; legacy files remain as a rollback copy.

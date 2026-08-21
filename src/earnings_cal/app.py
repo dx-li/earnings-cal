@@ -1151,18 +1151,86 @@ def api_earnings_ticker(ticker: str):
 def api_earnings_brief(ticker: str):
     ticker = ticker.strip().upper()
     repository = data_repository
-    key = os.environ.get("DEEPSEEK_API_KEY")
-    cached = repository.cached_brief(ticker)
+    body = request.get_json(silent=True) or {}
+    release_date = str(request.args.get("release_date") or body.get("release_date") or "")[:10]
+    fiscal_period = str(request.args.get("fiscal_period") or body.get("fiscal_period") or "")
+    cached = repository.brief_for_event(ticker, release_date, fiscal_period) if release_date and fiscal_period else repository.cached_brief(ticker)
     if request.method == "GET":
         return (jsonify(cached), 200) if cached else (jsonify({}), 404)
+    if not release_date or not fiscal_period:
+        return jsonify({"error": "release_date and fiscal_period are required"}), 400
+    event = next((row for row in cached_earnings(ticker).get("past", [])
+                  if str(row.get("date") or "")[:10] == release_date and row.get("fiscal_period") == fiscal_period), None)
+    if not event or (event.get("eps_reported") is None and event.get("revenue_reported") is None):
+        return jsonify({"error": "A completed matching earnings release was not found"}), 409
+    key = os.environ.get("DEEPSEEK_API_KEY")
     if not key:
         return jsonify({"error": "DEEPSEEK_API_KEY is not configured"}), 503
     harness = EarningsBriefHarness(repository, key, os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
     try:
         company = cached_earnings(ticker)
-        return jsonify(harness.run(ticker, company.get("name")))
+        return jsonify(harness.run(ticker, company.get("name"), release_date=release_date, fiscal_period=fiscal_period))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/earnings/ticker/<ticker>/briefs")
+def api_earnings_briefs(ticker: str):
+    return jsonify(data_repository.list_briefs(ticker.strip().upper()))
+
+
+_brief_worker_lock = threading.Lock()
+_brief_worker: threading.Thread | None = None
+
+
+def _completed_brief_event(ticker: str) -> tuple[dict, dict] | None:
+    company = cached_earnings(ticker)
+    today = datetime.now(MARKET_TZ).date().isoformat()
+    eligible = [event for event in company.get("past", [])
+                if str(event.get("date") or "")[:10] <= today
+                and event.get("fiscal_period")
+                and (event.get("eps_reported") is not None or event.get("revenue_reported") is not None)]
+    return (company, max(eligible, key=lambda row: str(row.get("date") or ""))) if eligible else None
+
+
+def _brief_worker_loop() -> None:
+    key = os.environ.get("DEEPSEEK_API_KEY")
+    if not key:
+        return
+    while True:
+        job = data_repository.next_brief_job()
+        if not job:
+            return
+        try:
+            EarningsBriefHarness(data_repository, key, os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")).run(
+                job["ticker"], job.get("company_name"), release_date=job["release_date"], fiscal_period=job["fiscal_period"])
+            data_repository.finish_brief_job(job)
+        except Exception as exc:
+            data_repository.finish_brief_job(job, str(exc))
+
+
+def start_brief_backfill() -> dict:
+    global _brief_worker
+    queued = 0
+    for ticker in load_tickers():
+        match = _completed_brief_event(ticker)
+        if not match:
+            continue
+        company, event = match
+        if data_repository.enqueue_brief(ticker, str(event["date"])[:10], event["fiscal_period"], company.get("name")):
+            queued += 1
+    with _brief_worker_lock:
+        if os.environ.get("DEEPSEEK_API_KEY") and (_brief_worker is None or not _brief_worker.is_alive()):
+            _brief_worker = threading.Thread(target=_brief_worker_loop, name="earnings-brief-worker", daemon=True)
+            _brief_worker.start()
+    return {"queued_now": queued, "jobs": data_repository.brief_job_counts(), "running": bool(_brief_worker and _brief_worker.is_alive())}
+
+
+@app.route("/api/research/brief-backfill", methods=["GET", "POST"])
+def api_brief_backfill():
+    if request.method == "POST":
+        return jsonify(start_brief_backfill())
+    return jsonify({"jobs": data_repository.brief_job_counts(), "running": bool(_brief_worker and _brief_worker.is_alive())})
 
 
 @app.route("/api/research/storage")
